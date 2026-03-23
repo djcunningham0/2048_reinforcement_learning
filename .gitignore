@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+.eggs/
+
+# Build
+build/
+dist/
+
+# Environment
+.env
+
+# Model weights
+*.pt
+*.pth
+
+# OS
+.DS_Store
+
+# Claude
+CLAUDE.local.md
