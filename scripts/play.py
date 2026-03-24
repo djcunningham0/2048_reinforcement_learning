@@ -43,7 +43,7 @@ def _tile_attr(v: int) -> int:
     return attr
 
 
-def draw(stdscr: curses.window, game: Game2048, msg: str) -> None:
+def draw(stdscr: curses.window, game: Game2048, msg: str, game_over: bool):
     stdscr.erase()
     stdscr.addstr(0, 0, "2048 — arrows: move  r: reset  q: quit")
     stdscr.addstr(1, 0, f"Score: {game.score:<10}  {msg}")
@@ -52,19 +52,19 @@ def draw(stdscr: curses.window, game: Game2048, msg: str) -> None:
     for r in range(4):
         stdscr.addstr(4 + r * 2, 0, "|")
         for c in range(4):
-            v = game.board[r][c]
+            v = game.board[r * 4 + c]
             cell = str(v) if v else "."
             stdscr.addstr(f"{cell:^{CELL_W}}", _tile_attr(v))
             stdscr.addstr("|")
         stdscr.addstr(5 + r * 2, 0, ("+" + "-" * CELL_W) * 4 + "+")
 
-    if game._done:
+    if game_over:
         stdscr.addstr(15, 0, "*** GAME OVER *** — press r to restart")
 
     stdscr.refresh()
 
 
-def play(stdscr: curses.window) -> None:
+def play(stdscr: curses.window):
     curses.curs_set(0)
     curses.start_color()
     curses.use_default_colors()
@@ -78,28 +78,31 @@ def play(stdscr: curses.window) -> None:
 
     game = Game2048()
     game.reset()
+    game_over = not game.get_valid_actions()
     msg = ""
 
     while True:
-        draw(stdscr, game, msg)
+        draw(stdscr, game, msg, game_over)
         key = stdscr.getch()
 
         if key == ord("q"):
             break
         elif key == ord("r"):
             game.reset()
+            game_over = False
             msg = ""
         elif key in KEY_TO_ACTION:
-            if game._done:
+            if game_over:
                 msg = "Game over — press r to restart"
                 continue
             action = KEY_TO_ACTION[key]
-            board_before = game._copy_board()
+            board_before = game.board
             game.step(action)
             if game.board == board_before:
                 msg = f"{action.name.lower()}: invalid move"
             else:
                 msg = f"moved {action.name.lower()}"
+            game_over = not game.get_valid_actions()
 
 
 if __name__ == "__main__":

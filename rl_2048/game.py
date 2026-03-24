@@ -7,6 +7,23 @@ import torch
 
 PROBABILITY_SPAWN_2 = 0.9
 
+Board = tuple[int, ...]  # flat tuple of 16 ints, indexed as r * 4 + c
+
+_EMPTY_BOARD: Board = (0,) * 16
+
+# Precomputed line indices for each action direction.
+# Each action has 4 lines of 4 indices. The indices are ordered so that
+# sliding "left" along the line is equivalent to the original action.
+_LINES: dict[int, tuple[tuple[int, ...], ...]] = {
+    0: ((0, 4, 8, 12), (1, 5, 9, 13), (2, 6, 10, 14), (3, 7, 11, 15)),  # UP
+    1: ((3, 2, 1, 0), (7, 6, 5, 4), (11, 10, 9, 8), (15, 14, 13, 12)),  # RIGHT
+    2: ((12, 8, 4, 0), (13, 9, 5, 1), (14, 10, 6, 2), (15, 11, 7, 3)),  # DOWN
+    3: ((0, 1, 2, 3), (4, 5, 6, 7), (8, 9, 10, 11), (12, 13, 14, 15)),  # LEFT
+}
+
+# Tile value -> one-hot channel index for encode_state
+_TILE_TO_CHANNEL = {0: 0, **{2**k: k for k in range(1, 16)}}
+
 
 class Action(IntEnum):
     UP = 0
@@ -16,129 +33,75 @@ class Action(IntEnum):
 
 
 class Game2048:
-    def __init__(self) -> None:
-        self.board: list[list[int]] = [[0] * 4 for _ in range(4)]
+    def __init__(self):
+        self.board: Board = _EMPTY_BOARD
         self.score: int = 0
-        self._done: bool = False
 
-    def reset(self) -> list[list[int]]:
+    def reset(self):
         """Clear the board and spawn 2 tiles."""
-        self.board = [[0] * 4 for _ in range(4)]
+        self.board = _EMPTY_BOARD
         self.score = 0
-        self._done = False
         self._spawn_tile()
         self._spawn_tile()
-        return self._copy_board()
 
-    def step(self, action: Action) -> tuple[list[list[int]], float, bool]:
-        """
-        Apply a move, spawn a tile, and check game over.
-
-        Returns (board, reward, done).
-        """
+    def step(self, action: Action) -> float:
+        """Apply a move and return the reward."""
         new_board, reward = self._apply_action(action)
         if new_board == self.board:
-            # Invalid move — no change, no spawn, game-over status unchanged
-            return self._copy_board(), 0.0, self._done
+            return 0.0
         self.board = new_board
         self.score += int(reward)
         self._spawn_tile()
-        self._done = self._is_game_over()
-        return self._copy_board(), reward, self._done
+        return reward
+
+    def _spawn_tile(self):
+        """Place a 2 (90%) or 4 (10%) on a random empty cell."""
+        empty = [i for i in range(16) if self.board[i] == 0]
+        if not empty:
+            return
+        idx = random.choice(empty)
+        value = 2 if random.random() < PROBABILITY_SPAWN_2 else 4
+        self.board = self.board[:idx] + (value,) + self.board[idx + 1 :]
 
     def get_valid_actions(self) -> list[Action]:
-        """Return actions that actually change the board."""
+        """Return actions that would change the board."""
         return [a for a in Action if self._can_move(a)]
 
     def _can_move(self, action: Action) -> bool:
         """Check if an action would change the board."""
-        lines = _orient(self._copy_board(), action)
-        return any(_row_can_move_left(line) for line in lines)
+        for line_indices in _LINES[action]:
+            vals = (
+                self.board[line_indices[0]],
+                self.board[line_indices[1]],
+                self.board[line_indices[2]],
+                self.board[line_indices[3]],
+            )
+            seen_empty = False
+            for i in range(4):
+                if vals[i] == 0:
+                    seen_empty = True
+                else:
+                    if seen_empty:
+                        return True
+                    if i + 1 < 4 and vals[i] == vals[i + 1]:
+                        return True
+        return False
 
-    def _copy_board(self) -> list[list[int]]:
-        return [row[:] for row in self.board]
-
-    def _spawn_tile(self) -> None:
-        """Place a 2 (90%) or 4 (10%) on a random empty cell."""
-        empty = [(r, c) for r in range(4) for c in range(4) if self.board[r][c] == 0]
-        if not empty:
-            return
-        r, c = random.choice(empty)
-        self.board[r][c] = 2 if random.random() < PROBABILITY_SPAWN_2 else 4
-
-    def _apply_action(self, action: Action) -> tuple[list[list[int]], float]:
-        """Apply action without mutating board. Returns (new_board, score)."""
-        # Rotate so we can always slide left, then rotate back
-        board = self._copy_board()
-        board = _orient(board, action)
+    def _apply_action(self, action: Action) -> tuple[Board, float]:
+        """Apply action, returning (new_board, score)."""
+        cells = list(self.board)
         total_score = 0.0
-        for i in range(4):
-            board[i], score = _slide_row_left(board[i])
+        for line_indices in _LINES[action]:
+            row = [cells[i] for i in line_indices]
+            new_row, score = _slide_row_left(row)
             total_score += score
-        board = _unorient(board, action)
-        return board, total_score
-
-    def _is_game_over(self) -> bool:
-        """Game is over when no empty cells and no adjacent tiles match."""
-        for r in range(4):
-            for c in range(4):
-                if self.board[r][c] == 0:
-                    return False
-                if c + 1 < 4 and self.board[r][c] == self.board[r][c + 1]:
-                    return False
-                if r + 1 < 4 and self.board[r][c] == self.board[r + 1][c]:
-                    return False
-        return True
-
-
-def _orient(board: list[list[int]], action: Action) -> list[list[int]]:
-    """Rotate/flip board so that the desired action becomes a left slide."""
-    if action == Action.LEFT:
-        return board
-    if action == Action.RIGHT:
-        return [row[::-1] for row in board]
-    if action == Action.UP:
-        return [list(col) for col in zip(*board)]
-    # down — transpose then reverse each row
-    return [list(col)[::-1] for col in zip(*board)]
-
-
-def _unorient(board: list[list[int]], action: Action) -> list[list[int]]:
-    """Reverse the orient transformation."""
-    if action == Action.LEFT:
-        return board
-    if action == Action.RIGHT:
-        return [row[::-1] for row in board]
-    if action == Action.UP:
-        return [list(col) for col in zip(*board)]
-    # down — reverse each row then transpose
-    reversed_rows = [row[::-1] for row in board]
-    return [list(col) for col in zip(*reversed_rows)]
-
-
-def _row_can_move_left(row: list[int]) -> bool:
-    """Check if sliding this row left would change it."""
-    seen_empty = False
-    for i in range(4):
-        if row[i] == 0:
-            seen_empty = True
-        else:
-            # A tile can move into an earlier empty space
-            if seen_empty:
-                return True
-            # A tile can merge with the next non-zero tile
-            if i + 1 < 4 and row[i] == row[i + 1]:
-                return True
-    return False
+            for i, idx in enumerate(line_indices):
+                cells[idx] = new_row[i]
+        return tuple(cells), total_score
 
 
 def _slide_row_left(row: list[int]) -> tuple[list[int], int]:
-    """
-    Slide and merge a single row to the left.
-
-    Returns (new row, score gained).
-    """
-    # Filter out zeros
+    """Slide and merge a single row to the left. Returns (new_row, score)."""
     tiles = [x for x in row if x != 0]
     result: list[int] = []
     score = 0
@@ -152,14 +115,13 @@ def _slide_row_left(row: list[int]) -> tuple[list[int], int]:
         else:
             result.append(tiles[i])
             i += 1
-    # Pad with zeros
     result.extend([0] * (4 - len(result)))
     return result, score
 
 
-def encode_state(board: list[list[int]]) -> torch.Tensor:
+def encode_state(board: Board) -> torch.Tensor:
     """
-    One-hot encode the board.
+    One-hot encode the board. Output shape: (16, 4, 4).
 
     Channel 0 = empty, channel k = tile 2^k.
     Output shape: (16, 4, 4).
@@ -208,15 +170,25 @@ def encode_state(board: list[list[int]]) -> torch.Tensor:
          [0, 0, 0, 0],
          [0, 0, 0, 0]]
     """
-    b = torch.tensor(board, dtype=torch.int32)
-    # Map zeros to channel 0, ..., tile 2^k to channel k
-    # clamp(0, 15) ensures safe indexing for tiles > 32768
-    channels = torch.where(
-        b == 0,
-        torch.zeros_like(b),
-        b.clamp(min=1).float().log2().to(torch.int32),
-    )
-    channels = channels.clamp(0, 15)
     tensor = torch.zeros(16, 4, 4)
-    tensor.scatter_(0, channels.unsqueeze(0), 1.0)
+    for i, val in enumerate(board):
+        r, c = divmod(i, 4)
+        tensor[_TILE_TO_CHANNEL[val], r, c] = 1.0
     return tensor
+
+
+def make_board(rows: list[list[int]]) -> Board:
+    """
+    Convert a 4x4 nested list to a flat board tuple. Useful for tests.
+
+    Example usage:
+    >>> board = make_board([
+    ...     [0, 2, 4, 0],
+    ...     [8, 0, 0, 2],
+    ...     [0, 0, 0, 0],
+    ...     [4, 2, 0, 16],
+    ... ])
+    >>> print(board)
+    (0, 2, 4, 0, 8, 0, 0, 2, 0, 0, 0, 0, 4, 2, 0, 16)
+    """
+    return tuple(val for row in rows for val in row)
