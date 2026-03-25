@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rl-2048"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.0",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "pytest",
+    "ruff",
+]
+
+[tool.setuptools.packages.find]
+include = ["rl_2048*"]
+
+[tool.black]
+preview = true
+enable-unstable-feature = ["hug_parens_with_braces_and_square_brackets"]
+color = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
