@@ -19,5 +19,8 @@ dist/
 # OS
 .DS_Store
 
+# TensorBoard
+runs/
+
 # Claude
 CLAUDE.local.md

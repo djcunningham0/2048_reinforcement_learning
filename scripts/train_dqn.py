@@ -28,7 +28,13 @@ def main():
     parser.add_argument("--eval-interval", type=int, default=None)
     parser.add_argument("--eval-episodes", type=int, default=None)
     parser.add_argument("--device", type=str, default=None)
-    parser.add_argument("--checkpoint-dir", type=str, default="checkpoints")
+    parser.add_argument("--run-dir", type=str, default="runs")
+    parser.add_argument(
+        "--run-name",
+        type=str,
+        default=None,
+        help="TensorBoard run name (default: dqn_{timestamp}). Use slashes for grouping, e.g. cnn_v1/lr_1e-4",
+    )
     args = parser.parse_args()
 
     config = DQNConfig()
@@ -53,7 +59,11 @@ def main():
         if val is not None:
             setattr(config, field, val)
 
-    train(config, checkpoint_dir=args.checkpoint_dir)
+    train(
+        config,
+        run_dir=args.run_dir,
+        run_name=args.run_name,
+    )
 
 
 if __name__ == "__main__":
