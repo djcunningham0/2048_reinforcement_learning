@@ -64,7 +64,8 @@ def train(config: DQNConfig, checkpoint_dir: str = "checkpoints"):
                 eval_result["max_score"],
                 eval_result["tile_distribution"],
             )
-            agent.save(checkpoint_path / f"checkpoint_ep{episode}.pt", global_step)
+            ep_str = str(episode).zfill(len(str(config.max_episodes)))
+            agent.save(checkpoint_path / f"checkpoint_ep{ep_str}.pt", global_step)
 
     agent.save(checkpoint_path / "final.pt", global_step)
     logger.info("Training complete. Model saved to %s", checkpoint_path / "final.pt")
