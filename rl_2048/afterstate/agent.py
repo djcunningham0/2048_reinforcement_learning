@@ -36,14 +36,14 @@ class AfterstateAgent:
             return Action(random.choice(valid_indices))
 
         # Evaluate all 4 afterstates in one forward pass, mask invalid
-        with torch.no_grad():
-            values = self.online_net(info.encoded.to(self.device)).squeeze(-1)
+        encoded = info.encoded.to(self.device, non_blocking=True)
+        rewards = info.rewards.to(self.device, non_blocking=True)
+        valid_mask = info.valid_mask.to(self.device, non_blocking=True)
+        with torch.inference_mode():
+            values = self.online_net(encoded).squeeze(-1)
 
-        rewards = info.rewards.to(self.device)
         action_values = rewards + self.config.gamma * values
-        action_values = action_values.masked_fill(
-            ~info.valid_mask.to(self.device), float("-inf")
-        )
+        action_values = action_values.masked_fill(~valid_mask, float("-inf"))
         return Action(action_values.argmax().item())
 
     def train_step(self, batch: BatchedAfterstateTransitions) -> float:
@@ -60,7 +60,7 @@ class AfterstateAgent:
         # Best action value from the next state: reward + discounted future value
         # TD target: max_a' [r(s',a') + gamma * V_target(afterstate(s',a'))]
         B = next_afterstates.shape[0]
-        with torch.no_grad():
+        with torch.inference_mode():
             flat = next_afterstates.view(B * 4, 16, 4, 4)
             next_v = self.target_net(flat).squeeze(-1).view(B, 4)  # (B, 4)
             action_values = next_rewards + self.config.gamma * next_v
@@ -70,7 +70,7 @@ class AfterstateAgent:
             targets = targets * (1.0 - dones)
 
         loss = self.loss_fn(v_pred, targets)
-        self.optimizer.zero_grad()
+        self.optimizer.zero_grad(set_to_none=True)
         loss.backward()
         nn.utils.clip_grad_norm_(
             self.online_net.parameters(), self.config.grad_clip_norm
