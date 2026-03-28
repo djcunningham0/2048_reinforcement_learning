@@ -16,7 +16,6 @@ class Profiler:
 
     def __init__(self):
         self._totals: dict[str, float] = defaultdict(float)
-        self._counts: dict[str, int] = defaultdict(int)
         self._start: float = 0.0
 
     def begin(self):
@@ -27,7 +26,6 @@ class Profiler:
         """Record elapsed time since the last ``begin()`` (or ``record()``) call."""
         now = time.perf_counter()
         self._totals[phase] += now - self._start
-        self._counts[phase] += 1
         self._start = now
 
     def log_and_reset(
@@ -56,4 +54,3 @@ class Profiler:
         )
 
         self._totals.clear()
-        self._counts.clear()
