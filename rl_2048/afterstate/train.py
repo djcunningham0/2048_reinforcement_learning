@@ -15,6 +15,7 @@ from rl_2048.afterstate.replay_buffer import (
     make_transition,
 )
 from rl_2048.game import Game2048
+from rl_2048.profiler import Profiler
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ def train(
     global_step = 0
     recent_losses: list[float] = []
     last_eval: dict = {}
+    profiler = Profiler()
 
     try:
         for episode in range(1, config.max_episodes + 1):
@@ -56,6 +58,7 @@ def train(
                 global_step=global_step,
                 recent_losses=recent_losses,
                 writer=writer,
+                profiler=profiler,
             )
 
             max_tile = max(game.board)
@@ -83,9 +86,12 @@ def train(
                     global_step,
                     len(buffer),
                 )
+                profiler.log_and_reset(episode, writer)
 
             if episode % config.eval_interval == 0:
+                profiler.begin()
                 last_eval = evaluate(game, agent, config.eval_episodes)
+                profiler.record("eval")
                 logger.info(
                     "EVAL Ep %d | Mean score: %.0f | Max: %d | Tiles: %s",
                     episode,
@@ -98,8 +104,10 @@ def train(
                 for tile_val, count in last_eval["tile_distribution"].items():
                     writer.add_scalar(f"eval/tile_{tile_val}", count, episode)
 
+                profiler.begin()
                 ep_str = str(episode).zfill(len(str(config.max_episodes)))
                 agent.save(checkpoint_path / f"checkpoint_ep{ep_str}.pt", global_step)
+                profiler.record("checkpoint_save")
 
         agent.save(checkpoint_path / "final.pt", global_step)
         logger.info(
@@ -120,31 +128,45 @@ def _run_episode(
     global_step: int,
     recent_losses: list[float],
     writer: SummaryWriter,
+    profiler: Profiler,
 ) -> int:
     """Play one training episode. Returns updated global_step."""
     game.reset()
     valid_actions = game.get_valid_actions()
 
     while valid_actions:
+        profiler.begin()
         epsilon = config.epsilon_at(global_step)
         action, afterstate = agent.select_action(game.board, valid_actions, epsilon)
+        profiler.record("select_action")
+
         game.step(action)
         next_valid = game.get_valid_actions()
         done = len(next_valid) == 0
+        profiler.record("env_step")
 
         buffer.push(make_transition(afterstate, game.board, done))
+        profiler.record("buffer_push")
 
         valid_actions = next_valid
         global_step += 1
 
         if len(buffer) >= config.train_start:
             if global_step % config.train_freq == 0:
-                loss = agent.train_step(buffer.sample(config.batch_size))
+                profiler.begin()
+                batch = buffer.sample(config.batch_size)
+                profiler.record("sample")
+
+                loss = agent.train_step(batch)
+                profiler.record("train_step")
+
                 recent_losses.append(loss)
                 writer.add_scalar("train/step_loss", loss, global_step)
 
             if global_step % config.target_sync_interval == 0:
+                profiler.begin()
                 agent.sync_target_network()
+                profiler.record("target_sync")
                 logger.debug("Step %d: target network synced", global_step)
 
     return global_step
