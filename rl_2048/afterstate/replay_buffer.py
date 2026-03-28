@@ -29,6 +29,15 @@ class AfterstateInfo:
 
 @dataclass(slots=True)
 class AfterstateTransition:
+    """
+    One afterstate transition.
+
+    afterstate: encoded afterstate of the action taken
+    next_afterstates: encoded afterstates for all 4 actions from the next board
+    next_rewards: rewards for all 4 actions from the next board
+    next_valid_mask: valid mask for all 4 actions from the next board
+    done: whether the next board is terminal (no valid actions)
+    """
     afterstate: torch.Tensor  # (16, 4, 4)
     next_afterstates: torch.Tensor  # (4, 16, 4, 4)
     next_rewards: torch.Tensor  # (4,)
