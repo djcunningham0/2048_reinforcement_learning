@@ -28,8 +28,9 @@ def train(
     """Main TD-afterstate training loop."""
     logger.info("Training started")
 
-    run_name = run_name or f"afterstate_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    run_path = Path(run_dir) / run_name
+    group_name = run_name or "afterstate"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_path = Path(run_dir) / group_name / timestamp
 
     writer = SummaryWriter(log_dir=str(run_path))
     logger.info("TensorBoard log dir: %s", writer.log_dir)
@@ -208,7 +209,7 @@ def _log_hyperparams(writer: SummaryWriter, config: AfterstateConfig) -> str:
         "final/mean_score": 0.0,
         "final/max_score": 0,
     }
-    run_name = config.hparams_label()
+    run_name = datetime.now().strftime("%Y%m%d_%H%M%S")
     writer.add_hparams(hparam_dict, metric_dict, run_name=run_name)
     return run_name
 

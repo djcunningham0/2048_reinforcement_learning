@@ -57,10 +57,3 @@ class DQNConfig:
         """Linear epsilon decay (so random actions are less likely over time)."""
         frac = min(step / self.epsilon_decay_steps, 1.0)
         return self.epsilon_start + frac * (self.epsilon_end - self.epsilon_start)
-
-    def hparams_label(self) -> str:
-        """Short directory-safe label summarising key hyperparameters."""
-        return (
-            f"lr{self.lr}_bs{self.batch_size}_g{self.gamma}"
-            f"_eps{self.epsilon_end}_buf{self.buffer_capacity}"
-        )
