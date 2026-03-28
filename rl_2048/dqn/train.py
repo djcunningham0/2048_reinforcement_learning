@@ -27,12 +27,12 @@ def train(
 
     run_name = run_name or f"dqn_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     run_path = Path(run_dir) / run_name
-    checkpoint_path = run_path / "checkpoints"
-    checkpoint_path.mkdir(parents=True, exist_ok=True)
 
     writer = SummaryWriter(log_dir=str(run_path))
     logger.info("TensorBoard log dir: %s", writer.log_dir)
-    _log_hyperparams(writer, config)
+    hparams_subdir = _log_hyperparams(writer, config)
+    checkpoint_path = run_path / hparams_subdir / "checkpoints"
+    checkpoint_path.mkdir(parents=True, exist_ok=True)
 
     game = Game2048()
     agent = DQNAgent(config)
@@ -186,12 +186,14 @@ def evaluate(game: Game2048, agent: DQNAgent, num_episodes: int) -> dict:
     }
 
 
-def _log_hyperparams(writer: SummaryWriter, config: DQNConfig):
+def _log_hyperparams(writer: SummaryWriter, config: DQNConfig) -> str:
     """Log hyperparameters for the TensorBoard Hyperparams dashboard.
 
     Registers config fields as hyperparameters with placeholder metric values.
     Actual final metrics are logged later as scalars under the same ``final/`` prefix,
     which TensorBoard picks up for the HParams parallel-coordinates view.
+
+    Returns the hparams subdirectory name used by TensorBoard.
     """
     hparam_dict = {
         k: v
@@ -202,7 +204,9 @@ def _log_hyperparams(writer: SummaryWriter, config: DQNConfig):
         "final/mean_score": 0.0,
         "final/max_score": 0,
     }
-    writer.add_hparams(hparam_dict, metric_dict, run_name=".")
+    run_name = config.hparams_label()
+    writer.add_hparams(hparam_dict, metric_dict, run_name=run_name)
+    return run_name
 
 
 def _log_network(writer: SummaryWriter, agent: DQNAgent):
