@@ -6,7 +6,7 @@ from rl_2048.afterstate.agent import AfterstateAgent
 from rl_2048.afterstate.config import AfterstateConfig
 from rl_2048.afterstate.replay_buffer import (
     AfterstateReplayBuffer,
-    AfterstateTransition,
+    make_transition,
 )
 from rl_2048.game import Action, apply_action, make_board
 
@@ -67,11 +67,7 @@ class TestAfterstateAgent:
         buf = AfterstateReplayBuffer(100)
         for _ in range(16):
             afterstate, _ = apply_action(board, Action.LEFT)
-            buf.push(
-                AfterstateTransition(
-                    afterstate=afterstate, next_state=board, done=False
-                )
-            )
+            buf.push(make_transition(afterstate, board, done=False))
         agent.train_step(buf.sample(16))
 
         x = torch.randn(1, 16, 4, 4, device=agent.device)

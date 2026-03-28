@@ -4,6 +4,7 @@ from rl_2048.afterstate.replay_buffer import (
     AfterstateReplayBuffer,
     AfterstateTransition,
     BatchedAfterstateTransitions,
+    make_transition,
 )
 from rl_2048.game import Action, Game2048, apply_action, make_board
 
@@ -21,11 +22,7 @@ def _make_board_with_valid_actions():
 def _make_transition() -> AfterstateTransition:
     board = _make_board_with_valid_actions()
     afterstate, _ = apply_action(board, Action.LEFT)
-    return AfterstateTransition(
-        afterstate=afterstate,
-        next_state=board,  # use original board as "next state" for testing
-        done=False,
-    )
+    return make_transition(afterstate, board, done=False)
 
 
 class TestAfterstateReplayBuffer:
@@ -57,9 +54,7 @@ class TestAfterstateReplayBuffer:
         """Valid mask in batch should match get_valid_actions on the next_state."""
         board = _make_board_with_valid_actions()
         afterstate, _ = apply_action(board, Action.LEFT)
-        transition = AfterstateTransition(
-            afterstate=afterstate, next_state=board, done=False
-        )
+        transition = make_transition(afterstate, board, done=False)
 
         buf = AfterstateReplayBuffer(100)
         buf.push(transition)
@@ -77,9 +72,7 @@ class TestAfterstateReplayBuffer:
         """Batch next_afterstates should match apply_action on the next_state."""
         board = _make_board_with_valid_actions()
         afterstate, _ = apply_action(board, Action.LEFT)
-        transition = AfterstateTransition(
-            afterstate=afterstate, next_state=board, done=False
-        )
+        transition = make_transition(afterstate, board, done=False)
 
         buf = AfterstateReplayBuffer(100)
         buf.push(transition)
@@ -92,18 +85,13 @@ class TestAfterstateReplayBuffer:
 
     def test_done_transitions(self):
         """Terminal transitions should have done=1."""
-        # A board with no valid actions
         terminal_board = make_board([
             [2, 4, 8, 16],
             [16, 8, 4, 2],
             [2, 4, 8, 16],
             [16, 8, 4, 2],
         ])
-        transition = AfterstateTransition(
-            afterstate=terminal_board,
-            next_state=terminal_board,
-            done=True,
-        )
+        transition = make_transition(terminal_board, terminal_board, done=True)
         buf = AfterstateReplayBuffer(100)
         buf.push(transition)
         batch = buf.sample(1)

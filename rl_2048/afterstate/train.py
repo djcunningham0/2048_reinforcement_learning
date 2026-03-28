@@ -12,7 +12,7 @@ from rl_2048.afterstate.agent import AfterstateAgent
 from rl_2048.afterstate.config import AfterstateConfig
 from rl_2048.afterstate.replay_buffer import (
     AfterstateReplayBuffer,
-    AfterstateTransition,
+    make_transition,
 )
 from rl_2048.game import Game2048
 
@@ -132,13 +132,7 @@ def _run_episode(
         next_valid = game.get_valid_actions()
         done = len(next_valid) == 0
 
-        buffer.push(
-            AfterstateTransition(
-                afterstate=afterstate,
-                next_state=game.board,
-                done=done,
-            )
-        )
+        buffer.push(make_transition(afterstate, game.board, done))
 
         valid_actions = next_valid
         global_step += 1

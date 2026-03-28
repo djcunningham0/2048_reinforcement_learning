@@ -1,8 +1,7 @@
 """
 Replay buffer for TD-afterstate learning.
 
-Afterstate encodings and next-step afterstates are computed on the fly during batch
-sampling.
+Afterstate encodings and next-step afterstates are pre-computed at push time.
 """
 
 import random
@@ -16,8 +15,10 @@ from rl_2048.game import Action, Board, apply_action, encode_state
 
 @dataclass(slots=True)
 class AfterstateTransition:
-    afterstate: Board  # board after slide+merge, before tile spawn
-    next_state: Board  # board after tile spawn
+    afterstate: torch.Tensor  # (16, 4, 4)
+    next_afterstates: torch.Tensor  # (4, 16, 4, 4)
+    next_rewards: torch.Tensor  # (4,)
+    next_valid_mask: torch.Tensor  # (4,) bool
     done: bool
 
 
@@ -28,6 +29,22 @@ class BatchedAfterstateTransitions:
     next_rewards: torch.Tensor  # (batch, 4) merge reward per action from next_state
     next_valid_masks: torch.Tensor  # (batch, 4) bool
     dones: torch.Tensor  # (batch,) float32
+
+
+def make_transition(
+    afterstate: Board,
+    next_state: Board,
+    done: bool,
+) -> AfterstateTransition:
+    """Build a pre-computed transition from raw boards."""
+    next_afterstates, next_rewards, next_mask = _compute_next_afterstates(next_state)
+    return AfterstateTransition(
+        afterstate=encode_state(afterstate),
+        next_afterstates=next_afterstates,
+        next_rewards=next_rewards,
+        next_valid_mask=next_mask,
+        done=done,
+    )
 
 
 class AfterstateReplayBuffer:
@@ -41,16 +58,11 @@ class AfterstateReplayBuffer:
 
     def sample(self, batch_size: int) -> BatchedAfterstateTransitions:
         transitions = random.sample(self._buffer, batch_size)
-
-        afterstates = torch.stack([encode_state(t.afterstate) for t in transitions])
-
-        next_data = [_compute_next_afterstates(t.next_state) for t in transitions]
-
         return BatchedAfterstateTransitions(
-            afterstates=afterstates,
-            next_afterstates=torch.stack([d[0] for d in next_data]),
-            next_rewards=torch.stack([d[1] for d in next_data]),
-            next_valid_masks=torch.stack([d[2] for d in next_data]),
+            afterstates=torch.stack([t.afterstate for t in transitions]),
+            next_afterstates=torch.stack([t.next_afterstates for t in transitions]),
+            next_rewards=torch.stack([t.next_rewards for t in transitions]),
+            next_valid_masks=torch.stack([t.next_valid_mask for t in transitions]),
             dones=torch.tensor([t.done for t in transitions], dtype=torch.float32),
         )
 
