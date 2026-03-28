@@ -46,7 +46,7 @@ class Game2048:
 
     def step(self, action: Action) -> float:
         """Apply a move and return the reward."""
-        new_board, reward = self._apply_action(action)
+        new_board, reward = apply_action(self.board, action)
         if new_board == self.board:
             return 0.0
         self.board = new_board
@@ -65,39 +65,41 @@ class Game2048:
 
     def get_valid_actions(self) -> list[Action]:
         """Return actions that would change the board."""
-        return [a for a in Action if self._can_move(a)]
+        return [a for a in Action if _can_move(self.board, a)]
 
-    def _can_move(self, action: Action) -> bool:
-        """Check if an action would change the board."""
-        for line_indices in _LINES[action]:
-            vals = (
-                self.board[line_indices[0]],
-                self.board[line_indices[1]],
-                self.board[line_indices[2]],
-                self.board[line_indices[3]],
-            )
-            seen_empty = False
-            for i in range(4):
-                if vals[i] == 0:
-                    seen_empty = True
-                else:
-                    if seen_empty:
-                        return True
-                    if i + 1 < 4 and vals[i] == vals[i + 1]:
-                        return True
-        return False
 
-    def _apply_action(self, action: Action) -> tuple[Board, float]:
-        """Apply action, returning (new_board, score)."""
-        cells = list(self.board)
-        total_score = 0.0
-        for line_indices in _LINES[action]:
-            row = [cells[i] for i in line_indices]
-            new_row, score = _slide_row_left(row)
-            total_score += score
-            for i, idx in enumerate(line_indices):
-                cells[idx] = new_row[i]
-        return tuple(cells), total_score
+def apply_action(board: Board, action: Action) -> tuple[Board, float]:
+    """Apply action deterministically. Returns (new_board, merge_score)."""
+    cells = list(board)
+    total_score = 0.0
+    for line_indices in _LINES[action]:
+        row = [cells[i] for i in line_indices]
+        new_row, score = _slide_row_left(row)
+        total_score += score
+        for i, idx in enumerate(line_indices):
+            cells[idx] = new_row[i]
+    return tuple(cells), total_score
+
+
+def _can_move(board: Board, action: Action) -> bool:
+    """Check if an action would change the board."""
+    for line_indices in _LINES[action]:
+        vals = (
+            board[line_indices[0]],
+            board[line_indices[1]],
+            board[line_indices[2]],
+            board[line_indices[3]],
+        )
+        seen_empty = False
+        for i in range(4):
+            if vals[i] == 0:
+                seen_empty = True
+            else:
+                if seen_empty:
+                    return True
+                if i + 1 < 4 and vals[i] == vals[i + 1]:
+                    return True
+    return False
 
 
 def _slide_row_left(row: list[int]) -> tuple[list[int], int]:

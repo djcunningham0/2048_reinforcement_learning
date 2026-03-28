@@ -2,7 +2,14 @@ import random
 
 import torch
 
-from rl_2048.game import Action, Game2048, _slide_row_left, encode_state, make_board
+from rl_2048.game import (
+    Action,
+    Game2048,
+    _slide_row_left,
+    apply_action,
+    encode_state,
+    make_board,
+)
 
 
 class TestSlideRowLeft:
@@ -231,3 +238,74 @@ class TestEncodeState:
         t = encode_state(tuple(board))
         assert t[3, 1, 2] == 1.0
         assert t[0, 1, 2] == 0.0  # not empty
+
+
+class TestApplyAction:
+    def test_slide_left(self):
+        board = make_board([
+            [0, 0, 0, 2],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+        ])
+        new_board, score = apply_action(board, Action.LEFT)
+        assert new_board[0] == 2  # tile at (0,0)
+        assert score == 0
+
+    def test_merge(self):
+        board = make_board([
+            [2, 2, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+        ])
+        new_board, score = apply_action(board, Action.LEFT)
+        assert new_board[0] == 4
+        assert score == 4
+
+    def test_matches_game_method(self):
+        """Standalone apply_action should match Game2048.step (minus spawn)."""
+        board = make_board([
+            [2, 4, 2, 4],
+            [4, 2, 4, 2],
+            [2, 2, 4, 4],
+            [0, 0, 0, 2],
+        ])
+        game = Game2048()
+        game.board = board
+        # Compare the deterministic part (before spawn)
+        new_board, score = apply_action(board, Action.LEFT)
+        expected_board = make_board([
+            [2, 4, 2, 4],
+            [4, 2, 4, 2],
+            [4, 8, 0, 0],
+            [2, 0, 0, 0],
+        ])
+        assert new_board == expected_board
+        assert score == 12
+
+
+class TestGetValidActions:
+    def test_corner_tile(self):
+        game = Game2048()
+        game.board = make_board([
+            [2, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+        ])
+        valid = game.get_valid_actions()
+        assert Action.LEFT not in valid
+        assert Action.UP not in valid
+        assert Action.RIGHT in valid
+        assert Action.DOWN in valid
+
+    def test_no_valid_actions(self):
+        game = Game2048()
+        game.board = make_board([
+            [2, 4, 8, 16],
+            [16, 8, 4, 2],
+            [2, 4, 8, 16],
+            [16, 8, 4, 2],
+        ])
+        assert game.get_valid_actions() == []
