@@ -12,7 +12,8 @@ from rl_2048.afterstate.agent import AfterstateAgent
 from rl_2048.afterstate.config import AfterstateConfig
 from rl_2048.afterstate.replay_buffer import (
     AfterstateReplayBuffer,
-    make_transition,
+    AfterstateTransition,
+    compute_all_afterstates,
 )
 from rl_2048.game import Game2048
 from rl_2048.profiler import Profiler
@@ -133,23 +134,38 @@ def _run_episode(
 ) -> int:
     """Play one training episode. Returns updated global_step."""
     game.reset()
-    valid_actions = game.get_valid_actions()
 
-    while valid_actions:
+    # Compute afterstates once for the initial board; reused across iterations.
+    profiler.begin()
+    cur_info = compute_all_afterstates(game.board)
+    profiler.record("compute_afterstates")
+
+    while cur_info.valid_mask.any():
         profiler.begin()
         epsilon = config.epsilon_at(global_step)
-        action, afterstate = agent.select_action(game.board, valid_actions, epsilon)
+        action = agent.select_action(cur_info, epsilon)
         profiler.record("select_action")
 
         game.step(action)
-        next_valid = game.get_valid_actions()
-        done = len(next_valid) == 0
         profiler.record("env_step")
 
-        buffer.push(make_transition(afterstate, game.board, done))
+        # Compute afterstates for the new board (reused as cur_info next iteration).
+        next_info = compute_all_afterstates(game.board)
+        done = not next_info.valid_mask.any()
+        profiler.record("compute_afterstates")
+
+        buffer.push(
+            AfterstateTransition(
+                afterstate=cur_info.encoded[action],
+                next_afterstates=next_info.encoded,
+                next_rewards=next_info.rewards,
+                next_valid_mask=next_info.valid_mask,
+                done=done,
+            )
+        )
         profiler.record("buffer_push")
 
-        valid_actions = next_valid
+        cur_info = next_info
         global_step += 1
 
         if len(buffer) >= config.train_start:
@@ -179,11 +195,11 @@ def evaluate(game: Game2048, agent: AfterstateAgent, num_episodes: int) -> dict:
     max_tiles: list[int] = []
     for _ in range(num_episodes):
         game.reset()
-        valid_actions = game.get_valid_actions()
-        while valid_actions:
-            action, _ = agent.select_action(game.board, valid_actions, epsilon=0.0)
+        info = compute_all_afterstates(game.board)
+        while info.valid_mask.any():
+            action = agent.select_action(info, epsilon=0.0)
             game.step(action)
-            valid_actions = game.get_valid_actions()
+            info = compute_all_afterstates(game.board)
         scores.append(game.score)
         max_tiles.append(max(game.board))
 

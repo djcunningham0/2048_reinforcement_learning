@@ -14,6 +14,20 @@ from rl_2048.game import Action, Board, apply_action, encode_state
 
 
 @dataclass(slots=True)
+class AfterstateInfo:
+    """Pre-computed afterstates for all 4 actions from a board state.
+
+    Shared between action selection (forward pass) and transition building
+    (stored as next_afterstates), so each board's afterstates are computed once.
+    """
+
+    boards: list[Board]  # raw afterstate board per action (original board if invalid)
+    encoded: torch.Tensor  # (4, 16, 4, 4)
+    rewards: torch.Tensor  # (4,)
+    valid_mask: torch.Tensor  # (4,) bool
+
+
+@dataclass(slots=True)
 class AfterstateTransition:
     afterstate: torch.Tensor  # (16, 4, 4)
     next_afterstates: torch.Tensor  # (4, 16, 4, 4)
@@ -31,19 +45,26 @@ class BatchedAfterstateTransitions:
     dones: torch.Tensor  # (batch,) float32
 
 
-def make_transition(
-    afterstate: Board,
-    next_state: Board,
-    done: bool,
-) -> AfterstateTransition:
-    """Build a pre-computed transition from raw boards."""
-    next_afterstates, next_rewards, next_mask = _compute_next_afterstates(next_state)
-    return AfterstateTransition(
-        afterstate=encode_state(afterstate),
-        next_afterstates=next_afterstates,
-        next_rewards=next_rewards,
-        next_valid_mask=next_mask,
-        done=done,
+def compute_all_afterstates(board: Board) -> AfterstateInfo:
+    """Compute afterstates, rewards, and valid mask for all 4 actions from a board."""
+    boards: list[Board] = []
+    encoded = torch.zeros(4, 16, 4, 4)
+    rewards = torch.zeros(4)
+    valid_mask = torch.zeros(4, dtype=torch.bool)
+
+    for action in Action:
+        new_board, reward = apply_action(board, action)
+        boards.append(new_board)
+        if new_board != board:
+            encoded[action] = encode_state(new_board)
+            rewards[action] = reward
+            valid_mask[action] = True
+
+    return AfterstateInfo(
+        boards=boards,
+        encoded=encoded,
+        rewards=rewards,
+        valid_mask=valid_mask,
     )
 
 
@@ -68,28 +89,3 @@ class AfterstateReplayBuffer:
 
     def __len__(self) -> int:
         return len(self._buffer)
-
-
-def _compute_next_afterstates(
-    board: Board,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Compute afterstates, rewards, and valid mask for all 4 actions from a board.
-
-    Returns (afterstates, rewards, valid_mask):
-        afterstates: (4, 16, 4, 4)
-        rewards: (4,)
-        valid_mask: (4,) bool
-    """
-    afterstates = torch.zeros(4, 16, 4, 4)
-    rewards = torch.zeros(4)
-    valid_mask = torch.zeros(4, dtype=torch.bool)
-
-    for action in Action:
-        new_board, reward = apply_action(board, action)
-        if new_board != board:
-            afterstates[action] = encode_state(new_board)
-            rewards[action] = reward
-            valid_mask[action] = True
-
-    return afterstates, rewards, valid_mask

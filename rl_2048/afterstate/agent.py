@@ -8,8 +8,11 @@ import torch
 from torch import nn
 
 from rl_2048.afterstate.config import AfterstateConfig
-from rl_2048.afterstate.replay_buffer import BatchedAfterstateTransitions
-from rl_2048.game import Action, Board, apply_action, encode_state
+from rl_2048.afterstate.replay_buffer import (
+    AfterstateInfo,
+    BatchedAfterstateTransitions,
+)
+from rl_2048.game import Action
 from rl_2048.network import ConvNetwork
 
 
@@ -25,33 +28,23 @@ class AfterstateAgent:
         self.optimizer = torch.optim.Adam(self.online_net.parameters(), lr=config.lr)
         self.loss_fn = nn.MSELoss()
 
-    def select_action(
-        self,
-        board: Board,
-        valid_actions: list[Action],
-        epsilon: float,
-    ) -> tuple[Action, Board]:
-        """Select action by evaluating V(afterstate) for each valid action."""
-        # Compute afterstates for all valid actions
-        afterstates: list[tuple[Board, float]] = []
-        for a in valid_actions:
-            afterstates.append(apply_action(board, a))
+    def select_action(self, info: AfterstateInfo, epsilon: float) -> Action:
+        """Select action using pre-computed AfterstateInfo."""
+        valid_indices = info.valid_mask.nonzero(as_tuple=False).view(-1).tolist()
 
         if random.random() < epsilon:
-            idx = random.randrange(len(valid_actions))
-            return valid_actions[idx], afterstates[idx][0]
+            return Action(random.choice(valid_indices))
 
-        # Batch-evaluate V(afterstate) for all valid actions
-        encoded = torch.stack([encode_state(s) for s, _ in afterstates])
+        # Evaluate all 4 afterstates in one forward pass, mask invalid
         with torch.no_grad():
-            values = self.online_net(encoded.to(self.device)).squeeze(-1)
+            values = self.online_net(info.encoded.to(self.device)).squeeze(-1)
 
-        # Action value = r + gamma * V(afterstate)
-        rewards_t = torch.tensor([r for _, r in afterstates], device=self.device)
-        action_values = rewards_t + self.config.gamma * values
-        best_idx = action_values.argmax().item()
-
-        return valid_actions[best_idx], afterstates[best_idx][0]
+        rewards = info.rewards.to(self.device)
+        action_values = rewards + self.config.gamma * values
+        action_values = action_values.masked_fill(
+            ~info.valid_mask.to(self.device), float("-inf")
+        )
+        return Action(action_values.argmax().item())
 
     def train_step(self, batch: BatchedAfterstateTransitions) -> float:
         """One gradient step on a batch. Returns loss value."""

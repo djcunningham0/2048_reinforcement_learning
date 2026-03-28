@@ -4,7 +4,7 @@ from rl_2048.afterstate.replay_buffer import (
     AfterstateReplayBuffer,
     AfterstateTransition,
     BatchedAfterstateTransitions,
-    make_transition,
+    compute_all_afterstates,
 )
 from rl_2048.game import Action, Game2048, apply_action, make_board
 
@@ -21,8 +21,14 @@ def _make_board_with_valid_actions():
 
 def _make_transition() -> AfterstateTransition:
     board = _make_board_with_valid_actions()
-    afterstate, _ = apply_action(board, Action.LEFT)
-    return make_transition(afterstate, board, done=False)
+    info = compute_all_afterstates(board)
+    return AfterstateTransition(
+        afterstate=info.encoded[Action.LEFT],
+        next_afterstates=info.encoded,
+        next_rewards=info.rewards,
+        next_valid_mask=info.valid_mask,
+        done=False,
+    )
 
 
 class TestAfterstateReplayBuffer:
@@ -53,8 +59,14 @@ class TestAfterstateReplayBuffer:
     def test_valid_mask_correctness(self):
         """Valid mask in batch should match get_valid_actions on the next_state."""
         board = _make_board_with_valid_actions()
-        afterstate, _ = apply_action(board, Action.LEFT)
-        transition = make_transition(afterstate, board, done=False)
+        info = compute_all_afterstates(board)
+        transition = AfterstateTransition(
+            afterstate=info.encoded[Action.LEFT],
+            next_afterstates=info.encoded,
+            next_rewards=info.rewards,
+            next_valid_mask=info.valid_mask,
+            done=False,
+        )
 
         buf = AfterstateReplayBuffer(100)
         buf.push(transition)
@@ -71,8 +83,14 @@ class TestAfterstateReplayBuffer:
     def test_next_afterstate_matches_apply_action(self):
         """Batch next_afterstates should match apply_action on the next_state."""
         board = _make_board_with_valid_actions()
-        afterstate, _ = apply_action(board, Action.LEFT)
-        transition = make_transition(afterstate, board, done=False)
+        info = compute_all_afterstates(board)
+        transition = AfterstateTransition(
+            afterstate=info.encoded[Action.LEFT],
+            next_afterstates=info.encoded,
+            next_rewards=info.rewards,
+            next_valid_mask=info.valid_mask,
+            done=False,
+        )
 
         buf = AfterstateReplayBuffer(100)
         buf.push(transition)
@@ -91,7 +109,14 @@ class TestAfterstateReplayBuffer:
             [2, 4, 8, 16],
             [16, 8, 4, 2],
         ])
-        transition = make_transition(terminal_board, terminal_board, done=True)
+        info = compute_all_afterstates(terminal_board)
+        transition = AfterstateTransition(
+            afterstate=info.encoded[0],
+            next_afterstates=info.encoded,
+            next_rewards=info.rewards,
+            next_valid_mask=info.valid_mask,
+            done=True,
+        )
         buf = AfterstateReplayBuffer(100)
         buf.push(transition)
         batch = buf.sample(1)
