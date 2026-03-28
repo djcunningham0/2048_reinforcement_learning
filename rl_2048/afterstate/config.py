@@ -35,7 +35,7 @@ class AfterstateConfig:
     train_start: int = 10_000
     max_episodes: int = 100_000
     eval_interval: int = 500
-    eval_episodes: int = 50
+    eval_episodes: int = 25
     device: str = _default_device()
 
     def epsilon_at(self, step: int) -> float:
