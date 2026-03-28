@@ -101,7 +101,8 @@ def train(
                 writer.add_scalar("eval/mean_score", last_eval["mean_score"], episode)
                 writer.add_scalar("eval/max_score", last_eval["max_score"], episode)
                 for tile_val, count in last_eval["tile_distribution"].items():
-                    writer.add_scalar(f"eval/tile_{tile_val}", count, episode)
+                    pct = count / config.eval_episodes
+                    writer.add_scalar(f"eval/tile_pct{tile_val}", pct, episode)
 
                 profiler.begin()
                 ep_str = str(episode).zfill(len(str(config.max_episodes)))
