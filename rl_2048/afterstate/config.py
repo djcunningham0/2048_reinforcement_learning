@@ -31,6 +31,10 @@ class AfterstateConfig:
     - `eval_episodes`: how many episodes to run for each evaluation
     - `train_freq`: train every N environment steps (higher = faster but less sample
       efficient)
+    - `restart`: whether to use the "restart" strategy (start episodes from the midpoint
+      of the previous episode's play record)
+    - `restart_min_length`: minimum episode length to trigger a restart (if shorter,
+      start fresh)
     - `device`: "cpu", "cuda", or "mps" for training (auto-detected by default)
     """
 
@@ -45,5 +49,7 @@ class AfterstateConfig:
     max_episodes: int = 100_000
     eval_interval: int = 500
     eval_episodes: int = 25
+    restart: bool = False
+    restart_min_length: int = 10
     device: str = _default_device()
 

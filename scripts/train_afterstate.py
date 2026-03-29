@@ -20,13 +20,11 @@ def main():
     parser.add_argument("--train-start", type=int, default=None)
     parser.add_argument("--train-freq", type=int, default=None)
     parser.add_argument("--target-sync-interval", type=int, default=None)
-    parser.add_argument("--epsilon-start", type=float, default=None)
-    parser.add_argument("--epsilon-end", type=float, default=None)
-    parser.add_argument("--epsilon-decay-steps", type=int, default=None)
     parser.add_argument("--gamma", type=float, default=None)
     parser.add_argument("--grad-clip-norm", type=float, default=None)
     parser.add_argument("--eval-interval", type=int, default=None)
     parser.add_argument("--eval-episodes", type=int, default=None)
+    parser.add_argument("--restart", action="store_true", default=None)
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--run-dir", type=str, default="runs")
     parser.add_argument(
@@ -46,13 +44,11 @@ def main():
         "train_start",
         "train_freq",
         "target_sync_interval",
-        "epsilon_start",
-        "epsilon_end",
-        "epsilon_decay_steps",
         "gamma",
         "grad_clip_norm",
         "eval_interval",
         "eval_episodes",
+        "restart",
         "device",
     ]:
         val = getattr(args, field.replace("-", "_"), None)

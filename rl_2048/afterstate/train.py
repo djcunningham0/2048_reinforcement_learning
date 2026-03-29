@@ -16,7 +16,7 @@ from rl_2048.afterstate.replay_buffer import (
     AfterstateTransition,
     compute_all_afterstates,
 )
-from rl_2048.game import Action, Game2048
+from rl_2048.game import Action, Board, Game2048
 from rl_2048.profiler import Profiler
 
 logger = logging.getLogger(__name__)
@@ -50,10 +50,22 @@ def train(
     recent_losses: list[float] = []
     last_eval: dict = {}
     profiler = Profiler()
+    history: list[tuple[Board, int]] = []
+    restart_turn = 0
 
     try:
         for episode in range(1, config.max_episodes + 1):
-            global_step = _run_episode(
+            # determine start state for restart strategy
+            start_state: tuple[Board, int] | None = None
+            if config.restart and history:
+                episode_len = len(history)
+                if episode_len > config.restart_min_length:
+                    restart_turn = (restart_turn + episode_len - 1) // 2
+                    start_state = history[restart_turn]
+                else:
+                    restart_turn = 0
+
+            global_step, history = _run_episode(
                 game=game,
                 agent=agent,
                 buffer=buffer,
@@ -62,6 +74,7 @@ def train(
                 recent_losses=recent_losses,
                 writer=writer,
                 profiler=profiler,
+                start_state=start_state,
             )
 
             max_tile = max(game.board)
@@ -131,9 +144,18 @@ def _run_episode(
     recent_losses: list[float],
     writer: SummaryWriter,
     profiler: Profiler,
-) -> int:
-    """Play one training episode. Returns updated global_step."""
-    game.reset()
+    start_state: tuple[Board, int] | None = None,
+) -> tuple[int, list[tuple[Board, int]]]:
+    """
+    Play one training episode. Returns (global_step, history), where history is a list
+    of (board, score) tuples for each turn.
+    """
+    if start_state is not None:
+        game.board, game.score = start_state
+    else:
+        game.reset()
+
+    history: list[tuple[Board, int]] = [(game.board, game.score)]
 
     # Compute afterstates once for the initial board; reused across iterations.
     profiler.begin()
@@ -170,6 +192,7 @@ def _run_episode(
 
         cur_info = next_info
         global_step += 1
+        history.append((game.board, game.score))
 
         if len(buffer) >= config.train_start:
             if global_step % config.train_freq == 0:
@@ -189,7 +212,7 @@ def _run_episode(
                 profiler.record("target_sync")
                 logger.debug("Step %d: target network synced", global_step)
 
-    return global_step
+    return global_step, history
 
 
 def evaluate(game: Game2048, agent: AfterstateAgent, num_episodes: int) -> dict:
