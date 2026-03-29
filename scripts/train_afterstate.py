@@ -25,6 +25,7 @@ def main():
     parser.add_argument("--eval-interval", type=int, default=None)
     parser.add_argument("--eval-episodes", type=int, default=None)
     parser.add_argument("--restart", action="store_true", default=None)
+    parser.add_argument("--restart-min-length", type=int, default=None)
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--run-dir", type=str, default="runs")
     parser.add_argument(
@@ -49,6 +50,7 @@ def main():
         "eval_interval",
         "eval_episodes",
         "restart",
+        "restart_min_length",
         "device",
     ]:
         val = getattr(args, field.replace("-", "_"), None)
