@@ -2,15 +2,7 @@
 
 from dataclasses import dataclass
 
-import torch
-
-
-def _default_device() -> str:
-    if torch.cuda.is_available():
-        return "cuda"
-    if torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
+from rl_2048.device import default_device
 
 
 @dataclass
@@ -51,5 +43,5 @@ class AfterstateConfig:
     eval_episodes: int = 25
     restart: bool = False
     restart_min_length: int = 10
-    device: str = _default_device()
+    device: str = default_device()
 

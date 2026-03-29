@@ -2,15 +2,7 @@
 
 from dataclasses import dataclass
 
-import torch
-
-
-def _default_device() -> str:
-    if torch.cuda.is_available():
-        return "cuda"
-    if torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
+from rl_2048.device import default_device
 
 
 @dataclass
@@ -51,7 +43,7 @@ class DQNConfig:
     max_episodes: int = 100_000
     eval_interval: int = 500
     eval_episodes: int = 25
-    device: str = _default_device()
+    device: str = default_device()
 
     def epsilon_at(self, step: int) -> float:
         """Linear epsilon decay (so random actions are less likely over time)."""
