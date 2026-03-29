@@ -1,6 +1,7 @@
 """TD-afterstate training loop."""
 
 import logging
+import random
 from collections import Counter
 from dataclasses import asdict
 from datetime import datetime
@@ -15,7 +16,7 @@ from rl_2048.afterstate.replay_buffer import (
     AfterstateTransition,
     compute_all_afterstates,
 )
-from rl_2048.game import Game2048
+from rl_2048.game import Action, Game2048
 from rl_2048.profiler import Profiler
 
 logger = logging.getLogger(__name__)
@@ -72,18 +73,16 @@ def train(
 
             writer.add_scalar("train/score", game.score, episode)
             writer.add_scalar("train/max_tile", max_tile, episode)
-            writer.add_scalar("train/epsilon", config.epsilon_at(global_step), episode)
             writer.add_scalar("train/avg_loss", avg_loss, episode)
             writer.add_scalar("train/buffer_size", len(buffer), episode)
             writer.add_scalar("train/global_step", global_step, episode)
 
             if episode % 100 == 0:
                 logger.info(
-                    "Ep %d | Score: %d | Max tile: %d | ε: %.3f | Avg loss: %.4f | Steps: %d | Buffer size: %d",
+                    "Ep %d | Score: %d | Max tile: %d | Avg loss: %.4f | Steps: %d | Buffer size: %d",
                     episode,
                     game.score,
                     max_tile,
-                    config.epsilon_at(global_step),
                     avg_loss,
                     global_step,
                     len(buffer),
@@ -143,8 +142,11 @@ def _run_episode(
 
     while cur_info.valid_mask.any():
         profiler.begin()
-        epsilon = config.epsilon_at(global_step)
-        action = agent.select_action(cur_info, epsilon)
+        if len(buffer) < config.train_start:
+            valid = cur_info.valid_mask.nonzero(as_tuple=False).view(-1).tolist()
+            action = Action(random.choice(valid))
+        else:
+            action = agent.select_action(cur_info)
         profiler.record("select_action")
 
         game.step(action)
@@ -191,14 +193,14 @@ def _run_episode(
 
 
 def evaluate(game: Game2048, agent: AfterstateAgent, num_episodes: int) -> dict:
-    """Run evaluation episodes with epsilon=0 (greedy)."""
+    """Run evaluation episodes (greedy policy)."""
     scores: list[int] = []
     max_tiles: list[int] = []
     for _ in range(num_episodes):
         game.reset()
         info = compute_all_afterstates(game.board)
         while info.valid_mask.any():
-            action = agent.select_action(info, epsilon=0.0)
+            action = agent.select_action(info)
             game.step(action)
             info = compute_all_afterstates(game.board)
         scores.append(game.score)

@@ -1,7 +1,6 @@
 """Afterstate agent — action selection via V(afterstate), TD training."""
 
 import copy
-import random
 from pathlib import Path
 
 import torch
@@ -28,13 +27,8 @@ class AfterstateAgent:
         self.optimizer = torch.optim.Adam(self.online_net.parameters(), lr=config.lr)
         self.loss_fn = nn.MSELoss()
 
-    def select_action(self, info: AfterstateInfo, epsilon: float) -> Action:
+    def select_action(self, info: AfterstateInfo) -> Action:
         """Select action using pre-computed AfterstateInfo."""
-        valid_indices = info.valid_mask.nonzero(as_tuple=False).view(-1).tolist()
-
-        if random.random() < epsilon:
-            return Action(random.choice(valid_indices))
-
         # Evaluate all 4 afterstates in one forward pass, mask invalid
         encoded = info.encoded.to(self.device, non_blocking=True)
         rewards = info.rewards.to(self.device, non_blocking=True)
