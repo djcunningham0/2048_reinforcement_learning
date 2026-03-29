@@ -22,21 +22,13 @@ def _make_board_with_valid_actions():
 
 
 class TestAfterstateAgent:
-    def test_epsilon_zero_returns_consistent_action(self):
+    def test_returns_consistent_action(self):
         config = AfterstateConfig(device="cpu")
         agent = AfterstateAgent(config)
         board = _make_board_with_valid_actions()
         info = compute_all_afterstates(board)
-        actions = {agent.select_action(info, epsilon=0.0) for _ in range(20)}
+        actions = {agent.select_action(info) for _ in range(20)}
         assert len(actions) == 1
-
-    def test_epsilon_one_explores(self):
-        config = AfterstateConfig(device="cpu")
-        agent = AfterstateAgent(config)
-        board = _make_board_with_valid_actions()
-        info = compute_all_afterstates(board)
-        actions = {agent.select_action(info, epsilon=1.0) for _ in range(100)}
-        assert len(actions) >= 2
 
     def test_invalid_actions_never_selected(self):
         config = AfterstateConfig(device="cpu")
@@ -45,7 +37,7 @@ class TestAfterstateAgent:
         info = compute_all_afterstates(board)
         valid_set = set(info.valid_mask.nonzero(as_tuple=False).view(-1).tolist())
         for _ in range(50):
-            action = agent.select_action(info, epsilon=0.5)
+            action = agent.select_action(info)
             assert action.value in valid_set
 
     def test_select_action_returns_valid_action(self):
@@ -53,7 +45,7 @@ class TestAfterstateAgent:
         agent = AfterstateAgent(config)
         board = _make_board_with_valid_actions()
         info = compute_all_afterstates(board)
-        action = agent.select_action(info, epsilon=0.0)
+        action = agent.select_action(info)
         expected_afterstate, _ = apply_action(board, action)
         assert expected_afterstate != board  # action is valid
 

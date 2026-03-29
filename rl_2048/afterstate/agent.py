@@ -54,7 +54,7 @@ class AfterstateAgent:
         # Best action value from the next state: reward + discounted future value
         # TD target: max_a' [r(s',a') + gamma * V_target(afterstate(s',a'))]
         B = next_afterstates.shape[0]
-        with torch.inference_mode():
+        with torch.no_grad():
             flat = next_afterstates.view(B * 4, 16, 4, 4)
             next_v = self.target_net(flat).squeeze(-1).view(B, 4)  # (B, 4)
             action_values = next_rewards + self.config.gamma * next_v
