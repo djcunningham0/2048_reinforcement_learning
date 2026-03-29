@@ -51,7 +51,6 @@ def train(
     last_eval: dict = {}
     profiler = Profiler()
     history: list[tuple[Board, int]] = []
-    restart_turn = 0
 
     try:
         for episode in range(1, config.max_episodes + 1):
@@ -60,10 +59,8 @@ def train(
             if config.restart and history:
                 episode_len = len(history)
                 if episode_len > config.restart_min_length:
-                    restart_turn = (restart_turn + episode_len - 1) // 2
+                    restart_turn = episode_len // 2
                     start_state = history[restart_turn]
-                else:
-                    restart_turn = 0
 
             global_step, history = _run_episode(
                 game=game,
