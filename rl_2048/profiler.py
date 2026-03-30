@@ -1,7 +1,5 @@
 """Lightweight wall-clock profiler for training loops."""
 
-from __future__ import annotations
-
 import logging
 import time
 from collections import defaultdict
