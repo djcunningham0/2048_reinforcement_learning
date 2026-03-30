@@ -44,4 +44,3 @@ class AfterstateConfig:
     restart: bool = False
     restart_min_length: int = 10
     device: str = default_device()
-

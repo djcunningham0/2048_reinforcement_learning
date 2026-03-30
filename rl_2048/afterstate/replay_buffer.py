@@ -38,6 +38,7 @@ class AfterstateTransition:
     next_valid_mask: valid mask for all 4 actions from the next board
     done: whether the next board is terminal (no valid actions)
     """
+
     afterstate: torch.Tensor  # (16, 4, 4)
     next_afterstates: torch.Tensor  # (4, 16, 4, 4)
     next_rewards: torch.Tensor  # (4,)
