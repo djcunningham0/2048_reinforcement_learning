@@ -25,11 +25,17 @@ def draw(
     game_over: bool,
     model_type: str,
     depth: int = 0,
+    time_budget: float | None = None,
 ):
     stdscr.erase()
     label = model_type.upper()
-    depth_str = f"  depth={depth}" if depth > 0 else ""
-    stdscr.addstr(0, 0, f"2048 {label}{depth_str} — q: quit  r: new game  ←/→: speed")
+    if time_budget is not None:
+        search_str = f"  budget={time_budget}s"
+    elif depth > 0:
+        search_str = f"  depth={depth}"
+    else:
+        search_str = ""
+    stdscr.addstr(0, 0, f"2048 {label}{search_str} — q: quit  r: new game  ←/→: speed")
     stdscr.addstr(1, 0, f"Score: {game.score:<10}  Max tile: {max(game.board)}")
 
     if action is not None:
@@ -101,15 +107,18 @@ def watch(
     delay: float,
     model_type: str,
     depth: int = 0,
+    time_budget: float | None = None,
 ):
-    if depth > 0:
+    if depth > 0 or time_budget is not None:
         if model_type == "afterstate":
             value_fn = make_afterstate_value_fn(model, device)
         else:
             value_fn = make_dqn_value_fn(model, device)
 
         def select_action(_model, board, _valid_actions, _device):
-            return expectimax_action(board, value_fn, depth)
+            return expectimax_action(
+                board, value_fn, depth=depth, time_budget=time_budget
+            )
 
     else:
         select_action = (
@@ -134,7 +143,7 @@ def watch(
     game_over = not game.get_valid_actions()
 
     while True:
-        draw(stdscr, game, action, game_over, model_type, depth)
+        draw(stdscr, game, action, game_over, model_type, depth, time_budget)
 
         if not game_over:
             time.sleep(delay)
@@ -195,12 +204,24 @@ def main():
         default=0,
         help="Expectimax search depth in plies (default: 0 = greedy)",
     )
+    parser.add_argument(
+        "--time-budget",
+        type=float,
+        default=None,
+        help="Seconds per move for iterative deepening (overrides --depth)",
+    )
     args = parser.parse_args()
 
     model = load_model(args.checkpoint, args.device, args.model_type)
     curses.wrapper(
         lambda stdscr: watch(
-            stdscr, model, args.device, args.delay, args.model_type, args.depth
+            stdscr,
+            model,
+            args.device,
+            args.delay,
+            args.model_type,
+            args.depth,
+            args.time_budget,
         )
     )
 

@@ -5,6 +5,7 @@ Usage examples::
     python -m scripts.evaluate_search checkpoints/model.pt
     python -m scripts.evaluate_search checkpoints/model.pt --depths 0 1 2 3
     python -m scripts.evaluate_search checkpoints/model.pt --model-type dqn --games 100
+    python -m scripts.evaluate_search checkpoints/model.pt --time-budgets 0.1 0.5 1.0
 """
 
 import argparse
@@ -71,6 +72,13 @@ def main():
         help="Search depths to evaluate (default: 0 1 2)",
     )
     parser.add_argument(
+        "--time-budgets",
+        type=float,
+        nargs="+",
+        default=None,
+        help="Time budgets in seconds to evaluate (e.g. 0.1 0.5 1.0)",
+    )
+    parser.add_argument(
         "--games",
         type=int,
         default=50,
@@ -91,7 +99,7 @@ def main():
             model, board, valid, args.device
         )
 
-    results_summary = []
+    results_summary: list[tuple[str, float, float, float]] = []
 
     for depth in args.depths:
         if depth == 0:
@@ -134,16 +142,63 @@ def main():
             print(f"    {tile:>5}: {pct:5.1f}% ({tile_counts[tile]}/{len(max_tiles)})")
 
         results_summary.append(
-            (depth, mean_score, median_score, statistics.mean(times_ms))
+            (f"depth={depth}", mean_score, median_score, statistics.mean(times_ms))
         )
+
+    if args.time_budgets:
+        for budget in args.time_budgets:
+            b = budget  # capture for closure
+            select_fn = lambda board, valid, _b=b: expectimax_action(
+                board, value_fn, time_budget=_b
+            )
+
+            scores = []
+            max_tiles = []
+            times_ms = []
+
+            print(f"\n--- Time budget {budget}s ({args.games} games) ---")
+            for i in range(args.games):
+                score, max_tile, avg_ms = run_game(select_fn)
+                scores.append(score)
+                max_tiles.append(max_tile)
+                times_ms.append(avg_ms)
+                print(
+                    f"  game {i + 1:>{len(str(args.games))}}/{args.games}: "
+                    f"score={score:>7,}  max={max_tile:>5}  "
+                    f"avg={avg_ms:>8.1f}ms/move"
+                )
+
+            tile_counts = Counter(max_tiles)
+            mean_score = statistics.mean(scores)
+            median_score = statistics.median(scores)
+
+            print(f"\nTime budget {budget}s summary:")
+            print(
+                f"  score: mean={mean_score:,.0f}  median={median_score:,.0f}  "
+                f"max={max(scores):,}"
+            )
+            print(f"  avg time/move: {statistics.mean(times_ms):.1f}ms")
+            print("  max tile distribution:")
+            for tile in sorted(tile_counts, reverse=True):
+                pct = tile_counts[tile] / len(max_tiles) * 100
+                print(
+                    f"    {tile:>5}: {pct:5.1f}% ({tile_counts[tile]}/{len(max_tiles)})"
+                )
+
+            results_summary.append((
+                f"budget={budget}s",
+                mean_score,
+                median_score,
+                statistics.mean(times_ms),
+            ))
 
     if len(results_summary) > 1:
         print("\n=== Comparison ===")
         print(
-            f"{'Depth':>6} {'Mean Score':>12} {'Median Score':>14} {'Avg ms/move':>12}"
+            f"{'Mode':>12} {'Mean Score':>12} {'Median Score':>14} {'Avg ms/move':>12}"
         )
-        for depth, mean_s, med_s, avg_t in results_summary:
-            print(f"{depth:>6} {mean_s:>12,.0f} {med_s:>14,.0f} {avg_t:>12.1f}")
+        for mode, mean_s, med_s, avg_t in results_summary:
+            print(f"{mode:>12} {mean_s:>12,.0f} {med_s:>14,.0f} {avg_t:>12.1f}")
 
 
 if __name__ == "__main__":

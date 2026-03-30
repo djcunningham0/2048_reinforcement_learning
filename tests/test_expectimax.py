@@ -52,6 +52,46 @@ class TestExpectimaxAction:
             ), f"depth={depth} returned invalid action {action}"
 
 
+class TestTimeBudget:
+    def test_returns_valid_action(self):
+        """Time-budgeted search should return a valid action."""
+        board = make_board([
+            [2, 4, 8, 16],
+            [0, 2, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 4, 0],
+        ])
+        action = expectimax_action(board, _zero_value_fn, time_budget=0.5)
+        afterstate, _ = apply_action(board, action)
+        assert afterstate != board
+
+    def test_tiny_budget_still_returns(self):
+        """Even a very small time budget should return at least a greedy result."""
+        board = make_board([
+            [2, 2, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+        ])
+        action = expectimax_action(board, _zero_value_fn, time_budget=0.0001)
+        afterstate, _ = apply_action(board, action)
+        assert afterstate != board
+
+    def test_max_depth_caps_search(self):
+        """max_depth=0 should behave like depth=0 regardless of time budget."""
+        board = make_board([
+            [2, 2, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+        ])
+        action_capped = expectimax_action(
+            board, _zero_value_fn, time_budget=10.0, max_depth=0
+        )
+        action_greedy = expectimax_action(board, _zero_value_fn, depth=0)
+        assert action_capped == action_greedy
+
+
 class TestChanceNode:
     def test_probabilities_sum_to_1(self):
         """Probabilities across chance node children should sum to 1."""

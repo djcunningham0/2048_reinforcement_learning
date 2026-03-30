@@ -12,8 +12,7 @@ Two value-function adapters are provided to wrap a `ConvNetwork`:
 If new methods/model types are added, you should implement a new value-function adapter.
 """
 
-from __future__ import annotations
-
+import time
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -48,6 +47,13 @@ class _LeafNode:
 
 
 @dataclass
+class _MaxNode:
+    """Picks the best action. Children keyed by Action."""
+
+    children: dict[Action, "_ChanceNode"]
+
+
+@dataclass
 class _ChanceNode:
     """Averages over random tile placements on an afterstate."""
 
@@ -55,34 +61,41 @@ class _ChanceNode:
     children: list[tuple[float, _MaxNode | _LeafNode]]  # (probability, node)
 
 
-@dataclass
-class _MaxNode:
-    """Picks the best action. Children keyed by Action."""
-
-    children: dict[Action, _ChanceNode]
-
-
 # ---------------------------------------------------------------------------
 # Phase 1: tree expansion
 # ---------------------------------------------------------------------------
+
+
+class DeadlineExceeded(Exception):
+    """Raised when tree expansion exceeds the time budget."""
 
 
 def _build_max_node(
     board: Board,
     depth: int,
     leaves: list[Board],
+    deadline: float | None = None,
 ) -> _MaxNode | _LeafNode:
     if depth <= 0:
         idx = len(leaves)
         leaves.append(board)
         return _LeafNode(index=idx)
 
+    if deadline is not None and time.perf_counter() >= deadline:
+        raise DeadlineExceeded
+
     children: dict[Action, _ChanceNode] = {}
     for action in Action:
         afterstate, reward = apply_action(board, action)
         if afterstate == board:
             continue
-        children[action] = _build_chance_node(afterstate, reward, depth, leaves)
+        children[action] = _build_chance_node(
+            afterstate=afterstate,
+            reward=reward,
+            depth=depth,
+            leaves=leaves,
+            deadline=deadline,
+        )
 
     if not children:
         # Terminal state — no valid actions
@@ -98,6 +111,7 @@ def _build_chance_node(
     reward: float,
     depth: int,
     leaves: list[Board],
+    deadline: float | None = None,
 ) -> _ChanceNode:
     empty = [i for i in range(16) if afterstate[i] == 0]
     cell_prob = 1.0 / len(empty)
@@ -107,7 +121,7 @@ def _build_chance_node(
         for tile, tile_prob in tile_probs:
             board = afterstate[:i] + (tile,) + afterstate[i + 1 :]
             prob = cell_prob * tile_prob
-            child = _build_max_node(board, depth - 1, leaves)
+            child = _build_max_node(board, depth - 1, leaves, deadline)
             children.append((prob, child))
     return _ChanceNode(reward=reward, children=children)
 
@@ -188,32 +202,13 @@ def _evaluate_node(
 # ---------------------------------------------------------------------------
 
 
-def expectimax_action(board: Board, value_fn: ValueFunction, depth: int = 1) -> Action:
-    """
-    Select the best action using expectimax search.
-
-    Builds a game tree of alternating max (player) and chance (random tile spawn) nodes
-    up to the given depth, collects all leaf boards, evaluates them in a single batched
-    forward pass via `value_fn`, then propagates expected values back up the tree to
-    pick the highest-value root action.
-
-    Parameters
-    ----------
-    board : Board
-        Current board state (pre-move, post-spawn).
-    value_fn : ValueFunction
-        Batched evaluation: list[Board] -> Tensor of V(afterstate) values.
-        (For example, use `make_afterstate_value_fn` or `make_dqn_value_fn` to wrap
-        a `ConvNetwork`.
-    depth : int
-        Number of max-chance plies to expand. depth=0 means leaves are
-        evaluated directly (greedy one-step lookahead via `_evaluate_leaves`).
-    """
-    # build tree for each root action, evaluate independently
-    best_action = Action.UP
-    best_value = float("-inf")
-
-    # collect all root actions' chance nodes, then batch-evaluate all leaves
+def _expectimax_at_depth(
+    board: Board,
+    value_fn: ValueFunction,
+    depth: int,
+    deadline: float | None = None,
+) -> Action:
+    """Run expectimax at a fixed depth. Raises _DeadlineExceeded if time runs out."""
     leaves: list[Board] = []
     root_actions: list[tuple[Action, _ChanceNode]] = []
 
@@ -221,21 +216,69 @@ def expectimax_action(board: Board, value_fn: ValueFunction, depth: int = 1) -> 
         afterstate, reward = apply_action(board, action)
         if afterstate == board:
             continue
-        chance = _build_chance_node(afterstate, reward, depth, leaves)
+        chance = _build_chance_node(
+            afterstate=afterstate,
+            reward=reward,
+            depth=depth,
+            leaves=leaves,
+            deadline=deadline,
+        )
         root_actions.append((action, chance))
 
     if not root_actions:
         return Action.UP  # terminal, doesn't matter
 
-    # batch evaluate all leaves
     leaf_values = _evaluate_leaves(leaves, value_fn)
 
-    # backpropagate to find best action
+    best_action = Action.UP
+    best_value = float("-inf")
     for action, chance in root_actions:
         value = _evaluate_node(chance, leaf_values)
         if value > best_value:
             best_value = value
             best_action = action
+
+    return best_action
+
+
+def expectimax_action(
+    board: Board,
+    value_fn: ValueFunction,
+    depth: int = 1,
+    time_budget: float | None = None,
+    max_depth: int = 10,
+) -> Action:
+    """
+    Select the best action using expectimax search.
+
+    Parameters
+    ----------
+    board : Board
+        Current board state (pre-move, post-spawn).
+    value_fn : ValueFunction
+        Batched evaluation: list[Board] -> Tensor of V(afterstate) values.
+    depth : int
+        Number of max-chance plies (fixed-depth mode, used when time_budget is None).
+    time_budget : float | None
+        Seconds allowed per move. When set, uses iterative deepening from 0 up to
+        max_depth, returning the best action from the deepest completed search.
+    max_depth : int
+        Upper bound on search depth in timed mode (ignored when time_budget is None).
+    """
+    if time_budget is None:
+        return _expectimax_at_depth(board, value_fn, depth)
+
+    # Iterative deepening: discard any depth that doesn't finish in time
+    deadline = time.perf_counter() + time_budget
+    best_action = _expectimax_at_depth(board, value_fn, 0)
+
+    for d in range(1, max_depth + 1):
+        if time.perf_counter() >= deadline:
+            break
+        try:
+            best_action = _expectimax_at_depth(board, value_fn, d, deadline)
+        except DeadlineExceeded:
+            break
 
     return best_action
 
