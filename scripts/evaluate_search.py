@@ -1,4 +1,11 @@
-"""Evaluate model performance across different expectimax search depths."""
+"""Evaluate model performance across different expectimax search depths.
+
+Usage examples::
+
+    python -m scripts.evaluate_search checkpoints/model.pt
+    python -m scripts.evaluate_search checkpoints/model.pt --depths 0 1 2 3
+    python -m scripts.evaluate_search checkpoints/model.pt --model-type dqn --games 100
+"""
 
 import argparse
 import statistics
