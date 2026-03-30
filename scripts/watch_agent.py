@@ -8,6 +8,11 @@ import torch
 
 from rl_2048.network import ConvNetwork
 from rl_2048.game import Action, Game2048, apply_action, encode_state
+from rl_2048.expectimax import (
+    expectimax_action,
+    make_afterstate_value_fn,
+    make_dqn_value_fn,
+)
 from scripts.play import CELL_W, _tile_attr
 
 MODEL_TYPES = ("dqn", "afterstate")
@@ -19,10 +24,12 @@ def draw(
     action: Action | None,
     game_over: bool,
     model_type: str,
+    depth: int = 0,
 ):
     stdscr.erase()
     label = model_type.upper()
-    stdscr.addstr(0, 0, f"2048 {label} — q: quit  r: new game  ←/→: speed")
+    depth_str = f"  depth={depth}" if depth > 0 else ""
+    stdscr.addstr(0, 0, f"2048 {label}{depth_str} — q: quit  r: new game  ←/→: speed")
     stdscr.addstr(1, 0, f"Score: {game.score:<10}  Max tile: {max(game.board)}")
 
     if action is not None:
@@ -93,10 +100,21 @@ def watch(
     device: str,
     delay: float,
     model_type: str,
+    depth: int = 0,
 ):
-    select_action = (
-        select_action_dqn if model_type == "dqn" else select_action_afterstate
-    )
+    if depth > 0:
+        if model_type == "afterstate":
+            value_fn = make_afterstate_value_fn(model, device)
+        else:
+            value_fn = make_dqn_value_fn(model, device)
+
+        def select_action(_model, board, _valid_actions, _device):
+            return expectimax_action(board, value_fn, depth)
+
+    else:
+        select_action = (
+            select_action_dqn if model_type == "dqn" else select_action_afterstate
+        )
 
     curses.curs_set(0)
     curses.start_color()
@@ -116,7 +134,7 @@ def watch(
     game_over = not game.get_valid_actions()
 
     while True:
-        draw(stdscr, game, action, game_over, model_type)
+        draw(stdscr, game, action, game_over, model_type, depth)
 
         if not game_over:
             time.sleep(delay)
@@ -171,11 +189,19 @@ def main():
         default=0.15,
         help="Seconds between moves (default: 0.15)",
     )
+    parser.add_argument(
+        "--depth",
+        type=int,
+        default=0,
+        help="Expectimax search depth in plies (default: 0 = greedy)",
+    )
     args = parser.parse_args()
 
     model = load_model(args.checkpoint, args.device, args.model_type)
     curses.wrapper(
-        lambda stdscr: watch(stdscr, model, args.device, args.delay, args.model_type)
+        lambda stdscr: watch(
+            stdscr, model, args.device, args.delay, args.model_type, args.depth
+        )
     )
 
 
