@@ -16,6 +16,7 @@ from rl_2048.expectimax import (
 from scripts.play import CELL_W, _tile_attr
 
 MODEL_TYPES = ("dqn", "afterstate")
+DELAY_STEPS = [0.0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0]
 
 
 def draw(
@@ -30,6 +31,7 @@ def draw(
     label = model_type.upper()
     depth_str = f"  depth={depth}" if depth > 0 else ""
     stdscr.addstr(0, 0, f"2048 {label}{depth_str} — q: quit  r: new game  ←/→: speed")
+
     stdscr.addstr(1, 0, f"Score: {game.score:<10}  Max tile: {max(game.board)}")
 
     if action is not None:
@@ -98,7 +100,7 @@ def watch(
     stdscr: curses.window,
     model: ConvNetwork,
     device: str,
-    delay: float,
+    delay_idx: int,
     model_type: str,
     depth: int = 0,
 ):
@@ -137,7 +139,9 @@ def watch(
         draw(stdscr, game, action, game_over, model_type, depth)
 
         if not game_over:
-            time.sleep(delay)
+            delay = DELAY_STEPS[delay_idx]
+            if delay > 0:
+                time.sleep(delay)
             valid_actions = game.get_valid_actions()
             if valid_actions:
                 action = select_action(model, game.board, valid_actions, device)
@@ -154,9 +158,9 @@ def watch(
             action = None
             game_over = False
         elif key == curses.KEY_RIGHT:
-            delay = max(0.01, delay / 2)
+            delay_idx = min(len(DELAY_STEPS) - 1, delay_idx + 1)
         elif key == curses.KEY_LEFT:
-            delay = min(2.0, delay * 2)
+            delay_idx = max(0, delay_idx - 1)
 
         if game_over:
             stdscr.nodelay(False)
@@ -179,15 +183,15 @@ def main():
         "--model-type",
         type=str,
         choices=MODEL_TYPES,
-        default="dqn",
-        help="Model type (default: dqn)",
+        default="afterstate",
+        help="Model type (default: afterstate)",
     )
     parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument(
         "--delay",
         type=float,
-        default=0.15,
-        help="Seconds between moves (default: 0.15)",
+        default=0.0,
+        help="Seconds between moves (default: 0.0)",
     )
     parser.add_argument(
         "--depth",
@@ -197,10 +201,13 @@ def main():
     )
     args = parser.parse_args()
 
+    delay_idx = min(
+        range(len(DELAY_STEPS)), key=lambda i: abs(DELAY_STEPS[i] - args.delay)
+    )
     model = load_model(args.checkpoint, args.device, args.model_type)
     curses.wrapper(
         lambda stdscr: watch(
-            stdscr, model, args.device, args.delay, args.model_type, args.depth
+            stdscr, model, args.device, delay_idx, args.model_type, args.depth
         )
     )
 
