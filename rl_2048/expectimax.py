@@ -213,19 +213,25 @@ def expectimax_action(board: Board, value_fn: ValueFunction, depth: int = 1) -> 
     best_action = Action.UP
     best_value = float("-inf")
 
+    valid_actions = []
+    for action in Action:
+        afterstate, reward = apply_action(board, action)
+        if afterstate != board:
+            valid_actions.append((action, afterstate, reward))
+
+    if not valid_actions:
+        return Action.UP  # terminal, doesn't matter
+
+    if len(valid_actions) == 1:
+        return valid_actions[0][0]
+
     # collect all root actions' chance nodes, then batch-evaluate all leaves
     leaves: list[Board] = []
     root_actions: list[tuple[Action, _ChanceNode]] = []
 
-    for action in Action:
-        afterstate, reward = apply_action(board, action)
-        if afterstate == board:
-            continue
+    for action, afterstate, reward in valid_actions:
         chance = _build_chance_node(afterstate, reward, depth, leaves)
         root_actions.append((action, chance))
-
-    if not root_actions:
-        return Action.UP  # terminal, doesn't matter
 
     # batch evaluate all leaves
     leaf_values = _evaluate_leaves(leaves, value_fn)
