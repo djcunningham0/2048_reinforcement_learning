@@ -56,11 +56,15 @@ class Game2048:
 
     def _spawn_tile(self):
         """Place a 2 (90%) or 4 (10%) on a random empty cell."""
+        value = 2 if random.random() < PROBABILITY_SPAWN_2 else 4
+        self.place_tile(value)
+
+    def place_tile(self, value: int):
+        """Place a tile of a specific value on a random empty cell."""
         empty = [i for i in range(16) if self.board[i] == 0]
         if not empty:
-            return
+            raise ValueError("Cannot place tile: board is full")
         idx = random.choice(empty)
-        value = 2 if random.random() < PROBABILITY_SPAWN_2 else 4
         self.board = self.board[:idx] + (value,) + self.board[idx + 1 :]
 
     def get_valid_actions(self) -> list[Action]:

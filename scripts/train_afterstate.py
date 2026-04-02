@@ -3,7 +3,7 @@
 import argparse
 import logging
 
-from rl_2048.afterstate.config import AfterstateConfig
+from rl_2048.afterstate.config import DEFAULT_JUMP_START, AfterstateConfig
 from rl_2048.afterstate.train import train
 
 
@@ -26,6 +26,15 @@ def main():
     parser.add_argument("--eval-episodes", type=int, default=None)
     parser.add_argument("--restart", action="store_true", default=None)
     parser.add_argument("--restart-min-length", type=int, default=None)
+    parser.add_argument(
+        "--jump-start",
+        nargs="*",
+        default=None,
+        help=(
+            "Enable jump start. No args for defaults, or specify tile=prob pairs "
+            "(e.g., 2048=0.05 4096=0.02)."
+        ),
+    )
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--run-dir", type=str, default="runs")
     parser.add_argument(
@@ -56,6 +65,15 @@ def main():
         val = getattr(args, field.replace("-", "_"), None)
         if val is not None:
             setattr(config, field, val)
+
+    if args.jump_start is not None:
+        if args.jump_start:
+            config.jump_start = {
+                int(k): float(v)
+                for k, v in (pair.split("=") for pair in args.jump_start)
+            }
+        else:
+            config.jump_start = DEFAULT_JUMP_START
 
     train(
         config,

@@ -208,6 +208,29 @@ class TestGame2048:
         assert game.board == board_before
 
 
+class TestPlaceTile:
+    def test_place_tile_on_empty_board(self):
+        game = Game2048()
+        game.place_tile(2048)
+        assert sum(1 for v in game.board if v == 2048) == 1
+        assert sum(1 for v in game.board if v != 0) == 1
+
+    def test_place_multiple_tiles(self):
+        game = Game2048()
+        game.place_tile(1024)
+        game.place_tile(2048)
+        assert sum(1 for v in game.board if v == 1024) == 1
+        assert sum(1 for v in game.board if v == 2048) == 1
+        assert sum(1 for v in game.board if v != 0) == 2
+
+    def test_place_tile_after_reset(self):
+        game = Game2048()
+        game.reset()
+        game.place_tile(512)
+        assert sum(1 for v in game.board if v == 512) == 1
+        assert sum(1 for v in game.board if v != 0) == 3  # 2 from reset + 1 placed
+
+
 class TestEncodeState:
     def test_shape(self):
         board = (0,) * 16

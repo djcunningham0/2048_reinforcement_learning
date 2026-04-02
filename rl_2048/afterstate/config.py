@@ -27,6 +27,9 @@ class AfterstateConfig:
       of the previous episode's play record)
     - `restart_min_length`: minimum episode length to trigger a restart (if shorter,
       start fresh)
+    - `jump_start`: optional dict mapping tile values to spawn probabilities for placing
+      large tiles at the start of fresh episodes (e.g., {2048: 0.05, 4096: 0.02}).
+      Each tile is rolled independently. Only applies to fresh starts, not restarts.
     - `device`: "cpu", "cuda", or "mps" for training (auto-detected by default)
     """
 
@@ -43,4 +46,14 @@ class AfterstateConfig:
     eval_episodes: int = 25
     restart: bool = False
     restart_min_length: int = 10
+    jump_start: dict[int, float] | None = None
     device: str = default_device()
+
+
+DEFAULT_JUMP_START: dict[int, float] = {
+    1024: 0.025,
+    2048: 0.025,
+    4096: 0.01,
+    8192: 0.005,
+    16384: 0.001,
+}

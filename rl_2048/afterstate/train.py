@@ -151,6 +151,8 @@ def _run_episode(
         game.board, game.score = start_state
     else:
         game.reset()
+        if config.jump_start:
+            _apply_jump_start(game, config.jump_start)
 
     history: list[tuple[Board, int]] = [(game.board, game.score)]
 
@@ -251,6 +253,13 @@ def _log_hyperparams(writer: SummaryWriter, config: AfterstateConfig) -> str:
     run_name = datetime.now().strftime("%Y%m%d_%H%M%S")
     writer.add_hparams(hparam_dict, metric_dict, run_name=run_name)
     return run_name
+
+
+def _apply_jump_start(game: Game2048, jump_start: dict[int, float]):
+    """Place large tiles on the board for late-game training exposure."""
+    for tile, prob in jump_start.items():
+        if random.random() < prob:
+            game.place_tile(tile)
 
 
 def _log_network(writer: SummaryWriter, agent: AfterstateAgent):
