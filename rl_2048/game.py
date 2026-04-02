@@ -179,6 +179,30 @@ def encode_state(board: Board) -> torch.Tensor:
     return tensor
 
 
+# Pre-built index tensors for batch_encode_states (created once, reused every call)
+_CELL_ROWS = torch.arange(16) // 4
+_CELL_COLS = torch.arange(16) % 4
+
+
+def batch_encode_states(boards: list[Board]) -> torch.Tensor:
+    """
+    Batch one-hot encode multiple boards. Output shape: (N, 16, 4, 4).
+
+    Vectorized: converts all boards to a channel-index tensor, then uses
+    advanced indexing to scatter 1s in a single operation.
+    """
+    n = len(boards)
+    raw = torch.tensor(boards, dtype=torch.int64)
+    channels = torch.where(raw == 0, 0, raw.float().log2().long())
+
+    tensor = torch.zeros(n, 16, 4, 4)
+    batch_idx = torch.arange(n, dtype=torch.long).unsqueeze(1).expand(n, 16).reshape(-1)
+    tensor[batch_idx, channels.reshape(-1), _CELL_ROWS.repeat(n), _CELL_COLS.repeat(n)] = (
+        1.0
+    )
+    return tensor
+
+
 def make_board(rows: list[list[int]]) -> Board:
     """
     Convert a 4x4 nested list to a flat board tuple. Useful for tests.

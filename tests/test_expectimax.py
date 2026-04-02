@@ -1,11 +1,15 @@
 """Tests for expectimax search."""
 
+import time
+
 import torch
 
 from rl_2048.game import Action, Board, apply_action, make_board
 from rl_2048.expectimax import (
     _build_chance_node,
+    _build_max_node,
     _evaluate_leaves,
+    _evaluate_node,
     expectimax_action,
 )
 
@@ -91,6 +95,20 @@ class TestTimeBudget:
         action_greedy = expectimax_action(board, _zero_value_fn, depth=0)
         assert action_capped == action_greedy
 
+    def test_time_budget_respected(self):
+        """Move selection should complete within a reasonable multiple of time_budget."""
+        board = make_board([
+            [2, 4, 8, 16],
+            [0, 2, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 4, 0],
+        ])
+        budget = 0.1
+        t0 = time.perf_counter()
+        expectimax_action(board, _zero_value_fn, time_budget=budget)
+        elapsed = time.perf_counter() - t0
+        assert elapsed < budget * 3, f"Took {elapsed:.3f}s with budget {budget}s"
+
 
 class TestChanceNode:
     def test_probabilities_sum_to_1(self):
@@ -109,13 +127,16 @@ class TestChanceNode:
 
 class TestLeafEvaluation:
     def test_leaf_value_includes_reward(self):
-        """Leaf evaluation should be max_a [reward + V(afterstate)]."""
+        """MaxLeafNode evaluation should be max_a [reward + V(afterstate)]."""
         board = make_board([
             [2, 2, 0, 0],
             [0, 0, 0, 0],
             [0, 0, 0, 0],
             [0, 0, 0, 0],
         ])
-        # With V=0, leaf value = max reward across actions = 4 (merging the 2s)
-        values = _evaluate_leaves([board], _zero_value_fn)
-        assert values[0].item() == 4.0
+        # Build a depth-0 max node which expands actions into afterstate leaves
+        leaves: list[Board] = []
+        node = _build_max_node(board, depth=0, leaves=leaves)
+        leaf_values = _evaluate_leaves(leaves, _zero_value_fn)
+        # With V=0, value = max reward across actions = 4 (merging the 2s)
+        assert _evaluate_node(node, leaf_values) == 4.0
