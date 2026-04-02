@@ -35,7 +35,7 @@ def train(
     checkpoint_path.mkdir(parents=True, exist_ok=True)
 
     game = Game2048()
-    network = NTupleNetwork(config.patterns)
+    network = NTupleNetwork(config.patterns, v_init=config.v_init)
     _log_network(writer, network)
     profiler = Profiler()
 

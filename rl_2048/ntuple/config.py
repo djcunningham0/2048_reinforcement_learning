@@ -29,6 +29,10 @@ class NTupleConfig:
         Episodes between evaluations.
     eval_episodes : int
         Number of episodes per evaluation.
+    v_init : float
+        Optimistic initialization value. The total initial board evaluation is
+        distributed evenly across all LUT weights. 0.0 (default) disables
+        optimistic initialization.
     """
 
     patterns: list[tuple[int, ...]] = field(
@@ -38,3 +42,4 @@ class NTupleConfig:
     max_episodes: int = 100_000
     eval_interval: int = 1_000
     eval_episodes: int = 25
+    v_init: float = 0.0

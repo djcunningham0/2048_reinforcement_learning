@@ -17,6 +17,7 @@ def main():
     parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--eval-interval", type=int, default=None)
     parser.add_argument("--eval-episodes", type=int, default=None)
+    parser.add_argument("--v-init", type=float, default=None)
     parser.add_argument("--run-dir", type=str, default="runs")
     parser.add_argument(
         "--run-name",
@@ -27,7 +28,7 @@ def main():
     args = parser.parse_args()
 
     config = NTupleConfig()
-    for field in ["max_episodes", "lr", "eval_interval", "eval_episodes"]:
+    for field in ["max_episodes", "lr", "eval_interval", "eval_episodes", "v_init"]:
         val = getattr(args, field, None)
         if val is not None:
             setattr(config, field, val)

@@ -35,6 +35,11 @@ class TestNTupleNetwork:
         network = NTupleNetwork(SMALL_PATTERNS)
         assert network.evaluate(SAMPLE_BOARD) == 0.0
 
+    def test_optimistic_initialization(self):
+        v_init = 500.0
+        network = NTupleNetwork(SMALL_PATTERNS, v_init=v_init)
+        assert network.evaluate(SAMPLE_BOARD) == pytest.approx(v_init)
+
     def test_update_changes_value(self):
         network = NTupleNetwork(SMALL_PATTERNS)
         delta = 1.0

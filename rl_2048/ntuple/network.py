@@ -99,7 +99,7 @@ def _update(
 class NTupleNetwork:
     """N-tuple network with lookup tables and 8-fold symmetry."""
 
-    def __init__(self, patterns: list[tuple[int, ...]]):
+    def __init__(self, patterns: list[tuple[int, ...]], v_init: float = 0.0):
         self.patterns = patterns
         self.num_patterns = len(patterns)
         tuple_size = len(patterns[0])
@@ -130,7 +130,12 @@ class NTupleNetwork:
         self._lut_offsets = np.array(
             [sum(lut_sizes[:i]) for i in range(len(lut_sizes))], dtype=np.int64
         )
-        self._luts = np.zeros(sum(lut_sizes), dtype=np.float64)
+        total_size = sum(lut_sizes)
+        if v_init:
+            per_weight = v_init / (self.num_patterns * 8)
+            self._luts = np.full(total_size, per_weight, dtype=np.float64)
+        else:
+            self._luts = np.zeros(total_size, dtype=np.float64)
 
     @property
     def luts(self) -> list[np.ndarray]:
