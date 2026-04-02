@@ -4,6 +4,8 @@ Usage examples::
 
     python -m scripts.evaluate_search checkpoints/model.pt
     python -m scripts.evaluate_search checkpoints/model.pt --depths 0 1 2 3
+    python -m scripts.evaluate_search checkpoints/model.pt --depths adaptive
+    python -m scripts.evaluate_search checkpoints/model.pt --depths 1 adaptive 10:1,6:2,0:3
     python -m scripts.evaluate_search checkpoints/model.pt --model-type dqn --games 100
 """
 
@@ -14,9 +16,11 @@ from collections import Counter
 
 from rl_2048.game import Action, Game2048, apply_action, encode_state
 from rl_2048.expectimax import (
+    DepthSchedule,
     expectimax_action,
     make_afterstate_value_fn,
     make_dqn_value_fn,
+    parse_depth,
 )
 from scripts.watch_agent import (
     load_model,
@@ -65,10 +69,14 @@ def main():
     parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument(
         "--depths",
-        type=int,
+        type=parse_depth,
         nargs="+",
         default=[0, 1, 2],
-        help="Search depths to evaluate (default: 0 1 2)",
+        help=(
+            "Search depths to evaluate (default: 0 1 2). "
+            "Each value can be an integer, 'adaptive', or a custom "
+            "schedule like '10:1,6:2,0:3'."
+        ),
     )
     parser.add_argument(
         "--games",
@@ -91,14 +99,19 @@ def main():
             model, board, valid, args.device
         )
 
+    def _label(d: int | DepthSchedule) -> str:
+        return "adaptive" if isinstance(d, DepthSchedule) else str(d)
+
+    configs = [(_label(d), d) for d in args.depths]
+
     results_summary = []
 
-    for depth in args.depths:
+    for label, depth in configs:
         if depth == 0:
             select_fn = greedy_fn
         else:
-            d = depth  # capture for closure
-            select_fn = lambda board, valid, _d=d: expectimax_action(
+            _depth = depth  # capture for closure
+            select_fn = lambda board, valid, _d=_depth: expectimax_action(
                 board, value_fn, _d
             )
 
@@ -106,7 +119,7 @@ def main():
         max_tiles = []
         times_ms = []
 
-        print(f"\n--- Depth {depth} ({args.games} games) ---")
+        print(f"\n--- Depth {label} ({args.games} games) ---")
         for i in range(args.games):
             score, max_tile, avg_ms = run_game(select_fn)
             scores.append(score)
@@ -122,7 +135,7 @@ def main():
         mean_score = statistics.mean(scores)
         median_score = statistics.median(scores)
 
-        print(f"\nDepth {depth} summary:")
+        print(f"\nDepth {label} summary:")
         print(
             f"  score: mean={mean_score:,.0f}  median={median_score:,.0f}  "
             f"max={max(scores):,}"
@@ -134,16 +147,16 @@ def main():
             print(f"    {tile:>5}: {pct:5.1f}% ({tile_counts[tile]}/{len(max_tiles)})")
 
         results_summary.append(
-            (depth, mean_score, median_score, statistics.mean(times_ms))
+            (label, mean_score, median_score, statistics.mean(times_ms))
         )
 
     if len(results_summary) > 1:
         print("\n=== Comparison ===")
         print(
-            f"{'Depth':>6} {'Mean Score':>12} {'Median Score':>14} {'Avg ms/move':>12}"
+            f"{'Depth':>8} {'Mean Score':>12} {'Median Score':>14} {'Avg ms/move':>12}"
         )
-        for depth, mean_s, med_s, avg_t in results_summary:
-            print(f"{depth:>6} {mean_s:>12,.0f} {med_s:>14,.0f} {avg_t:>12.1f}")
+        for label, mean_s, med_s, avg_t in results_summary:
+            print(f"{label:>8} {mean_s:>12,.0f} {med_s:>14,.0f} {avg_t:>12.1f}")
 
 
 if __name__ == "__main__":

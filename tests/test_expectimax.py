@@ -1,9 +1,11 @@
 """Tests for expectimax search."""
 
+import pytest
 import torch
 
 from rl_2048.game import Action, Board, apply_action, make_board
 from rl_2048.expectimax import (
+    DepthSchedule,
     _build_chance_node,
     _evaluate_leaves,
     expectimax_action,
@@ -79,3 +81,61 @@ class TestLeafEvaluation:
         # With V=0, leaf value = max reward across actions = 4 (merging the 2s)
         values = _evaluate_leaves([board], _zero_value_fn)
         assert values[0].item() == 4.0
+
+
+class TestDepthSchedule:
+    def test_fixed_always_returns_same_depth(self):
+        empty_board = make_board([
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 2],
+        ])
+        full_board = make_board([
+            [2, 4, 8, 16],
+            [32, 64, 128, 256],
+            [2, 4, 8, 16],
+            [32, 64, 128, 0],
+        ])
+        schedule = DepthSchedule.fixed(2)
+        assert schedule.get_depth(empty_board) == 2
+        assert schedule.get_depth(full_board) == 2
+
+    @pytest.mark.parametrize(
+        "empty_cells, expected_depth",
+        [
+            (8, 1),  # above high threshold
+            (6, 1),  # exactly at high threshold
+            (5, 2),  # between thresholds
+            (3, 2),  # exactly at middle threshold
+            (2, 3),  # between middle and fallback
+            (0, 3),  # no empty cells (fallback)
+        ],
+    )
+    def test_schedule_returns_correct_depth(self, empty_cells, expected_depth):
+        schedule = DepthSchedule(thresholds=[(6, 1), (3, 2), (0, 3)])
+        # Build a board with the desired number of empty cells
+        flat = [0] * empty_cells + [2] * (16 - empty_cells)
+        board = make_board([flat[i : i + 4] for i in range(0, 16, 4)])
+        assert schedule.get_depth(board) == expected_depth
+
+    def test_unsorted_thresholds_raises(self):
+        with pytest.raises(ValueError, match="sorted descending"):
+            DepthSchedule(thresholds=[(4, 2), (8, 1), (0, 3)])
+
+    def test_missing_fallback_raises(self):
+        with pytest.raises(ValueError, match="fallback"):
+            DepthSchedule(thresholds=[(8, 1), (4, 2)])
+
+    def test_expectimax_action_with_schedule(self):
+        """expectimax_action should accept a DepthSchedule and return a valid action."""
+        board = make_board([
+            [2, 2, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+        ])
+        schedule = DepthSchedule.fixed(1)
+        action = expectimax_action(board, _zero_value_fn, schedule)
+        afterstate, _ = apply_action(board, action)
+        assert afterstate != board

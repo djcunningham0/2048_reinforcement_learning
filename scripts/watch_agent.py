@@ -9,9 +9,11 @@ import torch
 from rl_2048.network import ConvNetwork
 from rl_2048.game import Action, Game2048, apply_action, encode_state
 from rl_2048.expectimax import (
+    DepthSchedule,
     expectimax_action,
     make_afterstate_value_fn,
     make_dqn_value_fn,
+    parse_depth,
 )
 from scripts.play import CELL_W, _tile_attr
 
@@ -25,11 +27,16 @@ def draw(
     action: Action | None,
     game_over: bool,
     model_type: str,
-    depth: int = 0,
+    depth: int | DepthSchedule = 0,
 ):
     stdscr.erase()
     label = model_type.upper()
-    depth_str = f"  depth={depth}" if depth > 0 else ""
+    if isinstance(depth, DepthSchedule):
+        depth_str = "  depth=adaptive"
+    elif depth > 0:
+        depth_str = f"  depth={depth}"
+    else:
+        depth_str = ""
     stdscr.addstr(0, 0, f"2048 {label}{depth_str} — q: quit  r: new game  ←/→: speed")
 
     stdscr.addstr(1, 0, f"Score: {game.score:<10}  Max tile: {max(game.board)}")
@@ -102,16 +109,19 @@ def watch(
     device: str,
     delay_idx: int,
     model_type: str,
-    depth: int = 0,
+    depth: int | DepthSchedule = 0,
 ):
-    if depth > 0:
+    use_search = isinstance(depth, DepthSchedule) or depth > 0
+    if use_search:
         if model_type == "afterstate":
             value_fn = make_afterstate_value_fn(model, device)
         else:
             value_fn = make_dqn_value_fn(model, device)
 
+        _depth = depth  # capture for closure
+
         def select_action(_model, board, _valid_actions, _device):
-            return expectimax_action(board, value_fn, depth)
+            return expectimax_action(board, value_fn, _depth)
 
     else:
         select_action = (
@@ -163,6 +173,7 @@ def watch(
             delay_idx = max(0, delay_idx - 1)
 
         if game_over:
+            draw(stdscr, game, action, game_over, model_type, depth)
             stdscr.nodelay(False)
             while True:
                 key = stdscr.getch()
@@ -195,11 +206,16 @@ def main():
     )
     parser.add_argument(
         "--depth",
-        type=int,
+        type=parse_depth,
         default=0,
-        help="Expectimax search depth in plies (default: 0 = greedy)",
+        help=(
+            "Search depth: an integer, 'adaptive', or a custom "
+            "schedule like '10:1,6:2,0:3' (default: 0 = greedy)"
+        ),
     )
     args = parser.parse_args()
+
+    depth = args.depth
 
     delay_idx = min(
         range(len(DELAY_STEPS)), key=lambda i: abs(DELAY_STEPS[i] - args.delay)
@@ -207,7 +223,7 @@ def main():
     model = load_model(args.checkpoint, args.device, args.model_type)
     curses.wrapper(
         lambda stdscr: watch(
-            stdscr, model, args.device, delay_idx, args.model_type, args.depth
+            stdscr, model, args.device, delay_idx, args.model_type, depth
         )
     )
 

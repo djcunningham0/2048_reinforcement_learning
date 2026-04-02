@@ -12,8 +12,7 @@ Two value-function adapters are provided to wrap a `ConvNetwork`:
 If new methods/model types are added, you should implement a new value-function adapter.
 """
 
-from __future__ import annotations
-
+import argparse
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -36,6 +35,80 @@ class ValueFunction(Protocol):
 
 
 # ---------------------------------------------------------------------------
+# Depth schedule
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class DepthSchedule:
+    """
+    Maps board emptiness to search depth.
+
+    Parameters
+    ----------
+    thresholds
+        List of `(min_empty_cells, depth)` pairs, checked in order. The first pair whose
+        `min_empty_cells <= empty` is used. Must be sorted descending by
+        `min_empty_cells` and end with a `0` entry as the fallback.
+
+    Example
+    -------
+    `thresholds=[(6, 1), (2, 2), (0, 3)]` means:
+    - If there are 6 or more empty cells, search depth = 1
+    - If there are 2-5 empty cells, search depth = 2
+    - If there are 0-1 empty cells, search depth = 3
+    """
+
+    thresholds: list[tuple[int, int]]
+
+    def __post_init__(self):
+        mins = [t for t, _ in self.thresholds]
+        if mins != sorted(mins, reverse=True):
+            raise ValueError("thresholds must be sorted descending by min_empty_cells")
+        if not self.thresholds or self.thresholds[-1][0] != 0:
+            raise ValueError("thresholds must end with a (0, depth) fallback entry")
+
+    @staticmethod
+    def fixed(depth: int) -> "DepthSchedule":
+        """Create a schedule that always returns the given depth."""
+        return DepthSchedule(thresholds=[(0, depth)])
+
+    def get_depth(self, board: Board) -> int:
+        """Return the search depth for the given board state."""
+        empty = sum(1 for cell in board if cell == 0)
+        for min_empty, depth in self.thresholds:
+            if empty >= min_empty:
+                return depth
+
+        raise ValueError("should be unreachable -- __post_init__ validation failed")
+
+
+DEFAULT_DEPTH_SCHEDULE = DepthSchedule(thresholds=[(6, 1), (2, 2), (0, 3)])
+
+
+def parse_depth(value: str) -> int | DepthSchedule:
+    """
+    Parse a depth CLI argument. Valid formats:
+    - An integer (e.g. "2") for fixed depth
+    - "adaptive" for the default schedule based on emptiness
+    - A custom comma-separated schedule (e.g. "10:1,6:2,0:3")
+    """
+    if value == "adaptive":
+        return DEFAULT_DEPTH_SCHEDULE
+    if ":" in value:
+        thresholds = []
+        for token in value.split(","):
+            parts = token.split(":")
+            if len(parts) != 2:
+                raise argparse.ArgumentTypeError(
+                    f"Expected 'min_empty:depth', got '{token}'"
+                )
+            thresholds.append((int(parts[0]), int(parts[1])))
+        return DepthSchedule(thresholds=thresholds)
+    return int(value)
+
+
+# ---------------------------------------------------------------------------
 # Tree nodes
 # ---------------------------------------------------------------------------
 
@@ -52,7 +125,7 @@ class _ChanceNode:
     """Averages over random tile placements on an afterstate."""
 
     reward: float
-    children: list[tuple[float, _MaxNode | _LeafNode]]  # (probability, node)
+    children: list[tuple[float, "_MaxNode | _LeafNode"]]  # (probability, node)
 
 
 @dataclass
@@ -188,7 +261,11 @@ def _evaluate_node(
 # ---------------------------------------------------------------------------
 
 
-def expectimax_action(board: Board, value_fn: ValueFunction, depth: int = 1) -> Action:
+def expectimax_action(
+    board: Board,
+    value_fn: ValueFunction,
+    depth: int | DepthSchedule = 1,
+) -> Action:
     """
     Select the best action using expectimax search.
 
@@ -205,11 +282,14 @@ def expectimax_action(board: Board, value_fn: ValueFunction, depth: int = 1) -> 
         Batched evaluation: list[Board] -> Tensor of V(afterstate) values.
         (For example, use `make_afterstate_value_fn` or `make_dqn_value_fn` to wrap
         a `ConvNetwork`.
-    depth : int
-        Number of max-chance plies to expand. depth=0 means leaves are
+    depth : int | DepthSchedule
+        Fixed number of max-chance plies to expand, or a `DepthSchedule` that
+        selects depth based on board emptiness. depth=0 means leaves are
         evaluated directly (greedy one-step lookahead via `_evaluate_leaves`).
     """
-    # build tree for each root action, evaluate independently
+    if isinstance(depth, DepthSchedule):
+        depth = depth.get_depth(board)
+
     best_action = Action.UP
     best_value = float("-inf")
 
