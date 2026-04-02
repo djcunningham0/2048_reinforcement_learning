@@ -162,7 +162,8 @@ def _best_afterstate_value(network: NTupleNetwork, board: Board) -> float:
 
 
 def _select_action(
-    network: NTupleNetwork, board: Board,
+    network: NTupleNetwork,
+    board: Board,
 ) -> tuple[Action | None, Board | None]:
     """Select best action, returning (action, afterstate). (None, None) if terminal."""
     best_action: Action | None = None

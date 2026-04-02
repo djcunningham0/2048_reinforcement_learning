@@ -65,12 +65,10 @@ class NTupleNetwork:
             self._sym_patterns.append(sym_group)
 
         # Powers of 16 for index computation: [16^(n-1), 16^(n-2), ..., 1]
-        self._powers: list[np.ndarray] = []
+        self._powers: list[tuple[int, ...]] = []
         for pattern in patterns:
             n = len(pattern)
-            self._powers.append(
-                np.array([16 ** (n - 1 - i) for i in range(n)], dtype=np.int64)
-            )
+            self._powers.append(tuple(16 ** (n - 1 - i) for i in range(n)))
 
         # Allocate LUTs — one per pattern, shared across symmetries
         self.luts: list[np.ndarray] = []
@@ -78,16 +76,16 @@ class NTupleNetwork:
             n = len(pattern)
             self.luts.append(np.zeros(16**n, dtype=np.float32))
 
-    def _board_indices(self, board: Board) -> np.ndarray:
+    def _board_indices(self, board: Board) -> list[int]:
         """Convert board tile values to LUT indices (0-15).
 
         Example
         -------
         >>> board = (128, 64, 2, 4, 0, 8, 4, 4, 2, 0, 0, 0, 0, 0, 0, 0)
         >>> network._board_indices(board)
-        array([7, 6, 1, 2, 0, 3, 2, 2, 1, 0, 0, 0, 0, 0, 0, 0])
+        [7, 6, 1, 2, 0, 3, 2, 2, 1, 0, 0, 0, 0, 0, 0, 0]
         """
-        return np.array([_TILE_TO_CHANNEL[v] for v in board], dtype=np.int64)
+        return [_TILE_TO_CHANNEL[v] for v in board]
 
     def evaluate(self, board: Board) -> float:
         """
@@ -99,7 +97,9 @@ class NTupleNetwork:
             powers = self._powers[i]
             lut = self.luts[i]
             for sym_positions in self._sym_patterns[i]:
-                lut_index = int(np.dot(indices[list(sym_positions)], powers))
+                lut_index = 0
+                for p, pw in zip(sym_positions, powers):
+                    lut_index += indices[p] * pw
                 total += float(lut[lut_index])
         return total
 
@@ -110,7 +110,9 @@ class NTupleNetwork:
             powers = self._powers[i]
             lut = self.luts[i]
             for sym_positions in self._sym_patterns[i]:
-                lut_index = int(np.dot(indices[list(sym_positions)], powers))
+                lut_index = 0
+                for p, pw in zip(sym_positions, powers):
+                    lut_index += indices[p] * pw
                 lut[lut_index] += delta
 
     def evaluate_batch(self, boards: list[Board]) -> torch.Tensor:
