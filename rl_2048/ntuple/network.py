@@ -7,10 +7,17 @@ patterns and all 8 symmetries of the square.
 
 from pathlib import Path
 
+import numba
 import numpy as np
 import torch
 
-from rl_2048.game import Board, _TILE_TO_CHANNEL
+from rl_2048.game import Board
+
+# Precomputed tile value -> LUT index (0-15). Index 0 = empty, index k = tile 2^k.
+# Supports tile values up to 2^15 = 32768.
+_TILE_LOOKUP = np.zeros(32769, dtype=np.int64)
+for _k in range(1, 16):
+    _TILE_LOOKUP[2**_k] = _k
 
 
 def _build_symmetries() -> tuple[tuple[int, ...], ...]:
@@ -48,72 +55,136 @@ def _build_symmetries() -> tuple[tuple[int, ...], ...]:
 _SYMMETRIES = _build_symmetries()
 
 
+@numba.njit(cache=True)
+def _evaluate(
+    board_indices: np.ndarray,
+    sym_positions: np.ndarray,
+    powers: np.ndarray,
+    luts: np.ndarray,
+    lut_offsets: np.ndarray,
+    num_patterns: int,
+) -> float:
+    """Evaluate a board by summing LUT lookups across all patterns and symmetries."""
+    total = 0.0
+    for i in range(num_patterns):
+        offset = lut_offsets[i]
+        for s in range(8):
+            lut_index = 0
+            for k in range(sym_positions.shape[2]):
+                lut_index += board_indices[sym_positions[i, s, k]] * powers[i, k]
+            total += luts[offset + lut_index]
+    return total
+
+
+@numba.njit(cache=True)
+def _update(
+    board_indices: np.ndarray,
+    sym_positions: np.ndarray,
+    powers: np.ndarray,
+    luts: np.ndarray,
+    lut_offsets: np.ndarray,
+    num_patterns: int,
+    delta: float,
+):
+    """Add delta to every LUT entry accessed when evaluating this board."""
+    for i in range(num_patterns):
+        offset = lut_offsets[i]
+        for s in range(8):
+            lut_index = 0
+            for k in range(sym_positions.shape[2]):
+                lut_index += board_indices[sym_positions[i, s, k]] * powers[i, k]
+            luts[offset + lut_index] += delta
+
+
 class NTupleNetwork:
     """N-tuple network with lookup tables and 8-fold symmetry."""
 
     def __init__(self, patterns: list[tuple[int, ...]]):
         self.patterns = patterns
         self.num_patterns = len(patterns)
+        tuple_size = len(patterns[0])
 
-        # Precompute transformed patterns for all symmetries
-        # sym_patterns[pattern_idx][sym_idx] = tuple of transformed positions
-        self._sym_patterns: list[list[tuple[int, ...]]] = []
-        for pattern in patterns:
-            sym_group = []
-            for sym in _SYMMETRIES:
-                sym_group.append(tuple(sym[p] for p in pattern))
-            self._sym_patterns.append(sym_group)
+        if any(len(p) != tuple_size for p in patterns):
+            raise ValueError("All patterns must have the same length")
+
+        # Precompute transformed patterns for all symmetries as a 3D numpy array
+        # Shape: (num_patterns, 8, tuple_size)
+        self._sym_patterns = np.empty(
+            (self.num_patterns, 8, tuple_size), dtype=np.int64
+        )
+        for i, pattern in enumerate(patterns):
+            for s, sym in enumerate(_SYMMETRIES):
+                for k, p in enumerate(pattern):
+                    self._sym_patterns[i, s, k] = sym[p]
 
         # Powers of 16 for index computation: [16^(n-1), 16^(n-2), ..., 1]
-        self._powers: list[tuple[int, ...]] = []
-        for pattern in patterns:
+        # Shape: (num_patterns, tuple_size)
+        self._powers = np.empty((self.num_patterns, tuple_size), dtype=np.int64)
+        for i, pattern in enumerate(patterns):
             n = len(pattern)
-            self._powers.append(tuple(16 ** (n - 1 - i) for i in range(n)))
+            for k in range(n):
+                self._powers[i, k] = 16 ** (n - 1 - k)
 
-        # Allocate LUTs — one per pattern, shared across symmetries
-        self.luts: list[np.ndarray] = []
-        for pattern in patterns:
-            n = len(pattern)
-            self.luts.append(np.zeros(16**n, dtype=np.float32))
+        # Concatenated LUT — all patterns share one flat array, accessed via offsets
+        lut_sizes = [16 ** len(p) for p in patterns]
+        self._lut_offsets = np.array(
+            [sum(lut_sizes[:i]) for i in range(len(lut_sizes))], dtype=np.int64
+        )
+        self._luts = np.zeros(sum(lut_sizes), dtype=np.float64)
 
-    def _board_indices(self, board: Board) -> list[int]:
+    @property
+    def luts(self) -> list[np.ndarray]:
+        """View into the concatenated LUT array, split per pattern (for save/load)."""
+        views = []
+        sizes = [16 ** len(p) for p in self.patterns]
+        for i, size in enumerate(sizes):
+            offset = self._lut_offsets[i]
+            views.append(self._luts[offset : offset + size])
+        return views
+
+    @luts.setter
+    def luts(self, value: list[np.ndarray]):
+        """Set LUT data from a list of per-pattern arrays (used by load)."""
+        for i, arr in enumerate(value):
+            offset = self._lut_offsets[i]
+            size = 16 ** len(self.patterns[i])
+            self._luts[offset : offset + size] = arr.astype(np.float64)
+
+    def _board_indices(self, board: Board) -> np.ndarray:
         """Convert board tile values to LUT indices (0-15).
 
         Example
         -------
         >>> board = (128, 64, 2, 4, 0, 8, 4, 4, 2, 0, 0, 0, 0, 0, 0, 0)
         >>> network._board_indices(board)
-        [7, 6, 1, 2, 0, 3, 2, 2, 1, 0, 0, 0, 0, 0, 0, 0]
+        array([7, 6, 1, 2, 0, 3, 2, 2, 1, 0, 0, 0, 0, 0, 0, 0])
         """
-        return [_TILE_TO_CHANNEL[v] for v in board]
+        return _TILE_LOOKUP[np.array(board, dtype=np.int64)]
 
     def evaluate(self, board: Board) -> float:
-        """
-        Evaluate a board by summing LUT lookups across all patterns and symmetries.
-        """
+        """Evaluate a board by summing LUT lookups across all patterns and symmetries."""
         indices = self._board_indices(board)
-        total = 0.0
-        for i in range(self.num_patterns):
-            powers = self._powers[i]
-            lut = self.luts[i]
-            for sym_positions in self._sym_patterns[i]:
-                lut_index = 0
-                for p, pw in zip(sym_positions, powers):
-                    lut_index += indices[p] * pw
-                total += float(lut[lut_index])
-        return total
+        return _evaluate(
+            indices,
+            self._sym_patterns,
+            self._powers,
+            self._luts,
+            self._lut_offsets,
+            self.num_patterns,
+        )
 
     def update(self, board: Board, delta: float):
         """Add delta to every LUT entry accessed when evaluating this board."""
         indices = self._board_indices(board)
-        for i in range(self.num_patterns):
-            powers = self._powers[i]
-            lut = self.luts[i]
-            for sym_positions in self._sym_patterns[i]:
-                lut_index = 0
-                for p, pw in zip(sym_positions, powers):
-                    lut_index += indices[p] * pw
-                lut[lut_index] += delta
+        _update(
+            indices,
+            self._sym_patterns,
+            self._powers,
+            self._luts,
+            self._lut_offsets,
+            self.num_patterns,
+            delta,
+        )
 
     def evaluate_batch(self, boards: list[Board]) -> torch.Tensor:
         """Evaluate a batch of boards. Conforms to the ValueFunction protocol."""
@@ -127,7 +198,7 @@ class NTupleNetwork:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         save_dict: dict[str, np.ndarray] = {
-            f"lut_{i}": lut for i, lut in enumerate(self.luts)
+            f"lut_{i}": lut.copy() for i, lut in enumerate(self.luts)
         }
         # Store pattern lengths and flat pattern data as int arrays
         save_dict["pattern_lengths"] = np.array(
@@ -150,6 +221,6 @@ class NTupleNetwork:
             patterns.append(tuple(flat[offset : offset + n]))
             offset += n
         network = cls(patterns)
-        for i in range(len(patterns)):
-            network.luts[i] = data[f"lut_{i}"].astype(np.float32)
+        lut_list = [data[f"lut_{i}"] for i in range(len(patterns))]
+        network.luts = lut_list
         return network
