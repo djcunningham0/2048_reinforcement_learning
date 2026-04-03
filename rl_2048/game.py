@@ -183,6 +183,41 @@ def encode_state(board: Board) -> torch.Tensor:
     return tensor
 
 
+def downgrade_board(board: Board, threshold: int = 8192) -> Board:
+    """
+    Recursively downgrade tiles above the largest missing tile until the largest tile is
+    below ``threshold`` or there is no gap. All tiles above the largest missing tile are
+    halved. Downgrading only kicks in when the board's max tile is at least ``threshold``.
+
+    Example:
+    >>> board = (8192, 2048, 1024, 256, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)  # gap at 512
+    >>> downgrade_board(board, threshold=8192)
+    (4096, 1024, 512, 256, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+
+    >>> board = (16384, 1024, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)  # gap at 2048
+    >>> downgrade_board(board, threshold=8192)
+    (4096, 1024, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+
+    >>> board = (8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 0, 0, 0, 0)  # no gap
+    >>> downgrade_board(board, threshold=8192)  # no change
+    (8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 0, 0, 0, 0)
+
+    >>> board = (1024, 64, 32, 16, 8, 4, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0)  # below threshold
+    >>> downgrade_board(board, threshold=8192)  # no change
+    (1024, 64, 32, 16, 8, 4, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    """
+    board_max = max(board)
+    while max(board) >= threshold:
+        present = {v for v in board if v > 0}
+        candidates = [v for v in present if v * 2 not in present and v < board_max]
+        if not candidates:
+            break  # no gap to collapse
+        largest_missing = max(candidates)
+        board = tuple(v // 2 if v > largest_missing else v for v in board)
+        board_max = max(board)
+    return board
+
+
 def make_board(rows: list[list[int]]) -> Board:
     """
     Convert a 4x4 nested list to a flat board tuple. Useful for tests.

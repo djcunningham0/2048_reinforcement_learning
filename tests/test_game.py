@@ -7,6 +7,7 @@ from rl_2048.game import (
     Game2048,
     _slide_row_left,
     apply_action,
+    downgrade_board,
     encode_state,
     make_board,
 )
@@ -332,3 +333,92 @@ class TestGetValidActions:
             [16, 8, 4, 2],
         ])
         assert game.get_valid_actions() == []
+
+
+class TestDowngradeBoard:
+    def test_single_gap_one_pass(self):
+        """Gap at 512 — one pass brings 4096 down to 2048."""
+        board = (4096, 2048, 1024, 256, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        assert downgrade_board(board, threshold=4096) == (
+            2048,
+            1024,
+            512,
+            256,
+            128,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        )
+
+    def test_recursive_multiple_passes(self):
+        """Gap at 2048 — needs two passes: 8192->4096, then 4096->2048."""
+        board = (8192, 1024, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        assert downgrade_board(board, threshold=4096) == (
+            2048,
+            1024,
+            64,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        )
+
+    def test_no_gap_no_change(self):
+        """Contiguous powers of 2 — no gap to collapse, returns unchanged."""
+        board = (4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 0, 0, 0, 0)
+        assert downgrade_board(board, threshold=4096) == board
+
+    def test_already_within_threshold(self):
+        """Max tile below threshold — no downgrading needed."""
+        board = (0, 2, 4, 8, 16, 64, 128, 256, 512, 1024, 2048, 0, 0, 0, 0, 0)
+        assert downgrade_board(board, threshold=4096) == board
+
+    def test_many_passes_large_tiles(self):
+        """Very large tiles require many recursive passes."""
+        board = (0, 0, 0, 0, 0, 0, 0, 0, 2, 4, 256, 1024, 4096, 8192, 16384, 32768)
+        result = downgrade_board(board, threshold=4096)
+        assert max(result) <= 2048
+
+    def test_below_threshold_no_change(self):
+        """Max tile below threshold — gap exists but no downgrading needed."""
+        board = (1024, 64, 32, 16, 8, 4, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        assert downgrade_board(board, threshold=4096) == board
+
+    def test_custom_threshold(self):
+        """Respects a non-default threshold."""
+        board = (1024, 512, 128, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        # Gap at 256, largest_missing=128, halve above 128: 1024->512, 512->256
+        result = downgrade_board(board, threshold=1024)
+        assert max(result) <= 512
+
+    def test_preserves_tiles_below_gap(self):
+        """Tiles at or below the gap threshold are not modified."""
+        board = (4096, 2048, 1024, 256, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        result = downgrade_board(board, threshold=4096)
+        # 128 and 256 should be untouched (they're <= the gap at 512)
+        assert result[3] == 256
+        assert result[4] == 128
+
+    def test_duplicate_tiles(self):
+        """Handles boards with duplicate tile values."""
+        board = (4096, 4096, 256, 256, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        # Gap at 512, largest_missing=256, halve above 256
+        result = downgrade_board(board, threshold=4096)
+        assert result == (2048, 2048, 256, 256, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)

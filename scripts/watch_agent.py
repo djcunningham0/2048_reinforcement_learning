@@ -17,6 +17,7 @@ from rl_2048.expectimax import (
     expectimax_action,
     make_afterstate_value_fn,
     make_dqn_value_fn,
+    make_ntuple_value_fn,
     parse_depth,
 )
 from rl_2048.inference import (
@@ -80,15 +81,16 @@ def watch(
     delay_idx: int,
     model_type: str,
     depth: int | DepthSchedule = 0,
+    downgrade_threshold: int | None = None,
 ):
     use_search = isinstance(depth, DepthSchedule) or depth > 0
     if use_search:
         if model_type == "ntuple":
-            value_fn = model.evaluate_batch
+            value_fn = make_ntuple_value_fn(model, downgrade_threshold)
         elif model_type == "afterstate":
-            value_fn = make_afterstate_value_fn(model, device)
+            value_fn = make_afterstate_value_fn(model, device, downgrade_threshold)
         else:
-            value_fn = make_dqn_value_fn(model, device)
+            value_fn = make_dqn_value_fn(model, device, downgrade_threshold)
 
         _depth = depth  # capture for closure
 
@@ -101,7 +103,12 @@ def watch(
             "afterstate": select_action_afterstate,
             "ntuple": select_action_ntuple,
         }
-        select_action = action_fns[model_type]
+        _greedy_fn = action_fns[model_type]
+
+        def select_action(_model, board, valid_actions, _device):
+            return _greedy_fn(
+                _model, board, valid_actions, _device, downgrade_threshold
+            )
 
     curses.curs_set(0)
     curses.start_color()
@@ -190,6 +197,12 @@ def main():
             "schedule like '10:1,6:2,0:3' (default: 0 = greedy)"
         ),
     )
+    parser.add_argument(
+        "--downgrade-threshold",
+        type=int,
+        default=None,
+        help="Downgrade tiles above this threshold (default: disabled)",
+    )
     args = parser.parse_args()
 
     depth = args.depth
@@ -200,7 +213,13 @@ def main():
     model = load_model(args.checkpoint, args.device, args.model_type)
     curses.wrapper(
         lambda stdscr: watch(
-            stdscr, model, args.device, delay_idx, args.model_type, depth
+            stdscr,
+            model,
+            args.device,
+            delay_idx,
+            args.model_type,
+            depth,
+            args.downgrade_threshold,
         )
     )
 

@@ -23,6 +23,7 @@ from rl_2048.game import (
     Board,
     PROBABILITY_SPAWN_2,
     apply_action,
+    downgrade_board,
     encode_state,
 )
 from rl_2048.network import ConvNetwork
@@ -331,22 +332,34 @@ def expectimax_action(
 # ---------------------------------------------------------------------------
 
 
+def _maybe_downgrade(boards: list[Board], threshold: int | None) -> list[Board]:
+    if threshold is None:
+        return boards
+    return [downgrade_board(b, threshold) for b in boards]
+
+
 def make_afterstate_value_fn(
     model: ConvNetwork,
     device: str | torch.device,
+    downgrade_threshold: int | None = None,
 ) -> ValueFunction:
     """Wrap an afterstate model (output_dim=1) as a ValueFunction."""
     device = torch.device(device)
 
     def value_fn(boards: list[Board]) -> torch.Tensor:
-        encoded = torch.stack([encode_state(b) for b in boards])
+        boards_ = _maybe_downgrade(boards, downgrade_threshold)
+        encoded = torch.stack([encode_state(b) for b in boards_])
         with torch.no_grad():
             return model(encoded.to(device)).squeeze(-1).cpu()
 
     return value_fn
 
 
-def make_dqn_value_fn(model: ConvNetwork, device: str | torch.device) -> ValueFunction:
+def make_dqn_value_fn(
+    model: ConvNetwork,
+    device: str | torch.device,
+    downgrade_threshold: int | None = None,
+) -> ValueFunction:
     """
     Wrap a DQN model (output_dim=4) as a ValueFunction.
 
@@ -355,9 +368,26 @@ def make_dqn_value_fn(model: ConvNetwork, device: str | torch.device) -> ValueFu
     device = torch.device(device)
 
     def value_fn(boards: list[Board]) -> torch.Tensor:
-        encoded = torch.stack([encode_state(b) for b in boards])
+        boards_ = _maybe_downgrade(boards, downgrade_threshold)
+        encoded = torch.stack([encode_state(b) for b in boards_])
         with torch.no_grad():
             q_all = model(encoded.to(device))  # (N, 4)
             return q_all.max(dim=1).values.cpu()
+
+    return value_fn
+
+
+def make_ntuple_value_fn(
+    model: "NTupleNetwork",
+    downgrade_threshold: int | None = None,
+) -> ValueFunction:
+    """Wrap an NTupleNetwork as a ValueFunction, with optional tile downgrading."""
+
+    def value_fn(boards: list[Board]) -> torch.Tensor:
+        boards_ = _maybe_downgrade(boards, downgrade_threshold)
+        values = torch.empty(len(boards_))
+        for j, board in enumerate(boards_):
+            values[j] = model.evaluate(board)
+        return values
 
     return value_fn

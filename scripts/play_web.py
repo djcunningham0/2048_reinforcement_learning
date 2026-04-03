@@ -20,6 +20,7 @@ from rl_2048.expectimax import (
     expectimax_action,
     make_afterstate_value_fn,
     make_dqn_value_fn,
+    make_ntuple_value_fn,
     parse_depth,
 )
 from rl_2048.inference import (
@@ -115,16 +116,17 @@ def build_select_action(
     device: str,
     model_type: str,
     depth: int | DepthSchedule,
+    downgrade_threshold: int | None = None,
 ):
     """Build an action-selection function."""
     use_search = isinstance(depth, DepthSchedule) or depth > 0
     if use_search:
         if model_type == "ntuple":
-            value_fn = model.evaluate_batch
+            value_fn = make_ntuple_value_fn(model, downgrade_threshold)
         elif model_type == "afterstate":
-            value_fn = make_afterstate_value_fn(model, device)
+            value_fn = make_afterstate_value_fn(model, device, downgrade_threshold)
         else:
-            value_fn = make_dqn_value_fn(model, device)
+            value_fn = make_dqn_value_fn(model, device, downgrade_threshold)
 
         def select_action(_model, board, _valid_actions, _device):
             return expectimax_action(board, value_fn, depth)
@@ -136,7 +138,12 @@ def build_select_action(
         "afterstate": select_action_afterstate,
         "ntuple": select_action_ntuple,
     }
-    return action_fns[model_type]
+    _greedy_fn = action_fns[model_type]
+
+    def select_action(_model, board, valid_actions, _device):
+        return _greedy_fn(_model, board, valid_actions, _device, downgrade_threshold)
+
+    return select_action
 
 
 def game_loop(
@@ -146,8 +153,11 @@ def game_loop(
     model_type: str,
     depth: int | DepthSchedule,
     move_delay: float,
+    downgrade_threshold: int | None = None,
 ):
-    select_action = build_select_action(model, device, model_type, depth)
+    select_action = build_select_action(
+        model, device, model_type, depth, downgrade_threshold
+    )
 
     while True:
         input("Press Enter to start playing (set up the game in the browser first)...")
@@ -229,6 +239,12 @@ def main():
         ),
     )
     parser.add_argument(
+        "--downgrade-threshold",
+        type=int,
+        default=None,
+        help="Downgrade tiles above this threshold (default: disabled)",
+    )
+    parser.add_argument(
         "--move-delay",
         type=float,
         default=0.0,
@@ -265,6 +281,7 @@ def main():
             model_type=args.model_type,
             depth=args.depth,
             move_delay=args.move_delay,
+            downgrade_threshold=args.downgrade_threshold,
         )
 
         input("Press Enter to close the browser...")
