@@ -232,7 +232,7 @@ def main():
         "--move-delay",
         type=float,
         default=0.0,
-        help="Seconds between moves (default: 0.2)",
+        help="Seconds between moves (default: 0.0)",
     )
     parser.add_argument(
         "--url",
