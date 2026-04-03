@@ -4,11 +4,7 @@ import argparse
 import curses
 import time
 
-import torch
-
-from rl_2048.network import ConvNetwork
-from rl_2048.ntuple.network import NTupleNetwork
-from rl_2048.game import Action, Game2048, apply_action, encode_state
+from rl_2048.game import Action, Game2048
 from rl_2048.expectimax import (
     DepthSchedule,
     expectimax_action,
@@ -16,9 +12,15 @@ from rl_2048.expectimax import (
     make_dqn_value_fn,
     parse_depth,
 )
+from rl_2048.inference import (
+    MODEL_TYPES,
+    load_model,
+    select_action_afterstate,
+    select_action_dqn,
+    select_action_ntuple,
+)
 from scripts.play import CELL_W, _tile_attr
 
-MODEL_TYPES = ("dqn", "afterstate", "ntuple")
 DELAY_STEPS = [0.0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0]
 
 
@@ -64,72 +66,9 @@ def draw(
     stdscr.refresh()
 
 
-def load_model(
-    checkpoint_path: str,
-    device: str,
-    model_type: str,
-) -> ConvNetwork | NTupleNetwork:
-    if model_type == "ntuple":
-        return NTupleNetwork.load(checkpoint_path)
-    output_dim = 4 if model_type == "dqn" else 1
-    model = ConvNetwork(output_dim=output_dim)
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
-    model.load_state_dict(checkpoint["online_net"])
-    model.eval()
-    return model.to(torch.device(device))
-
-
-def select_action_dqn(
-    model: ConvNetwork,
-    board: list[int],
-    valid_actions: list[Action],
-    device: str,
-) -> Action:
-    state = encode_state(board)
-    with torch.no_grad():
-        q_values = model(state.unsqueeze(0).to(device)).squeeze(0)
-        mask = torch.full_like(q_values, float("-inf"))
-        for a in valid_actions:
-            mask[a] = 0.0
-        q_values = q_values + mask
-        return Action(q_values.argmax().item())
-
-
-def select_action_afterstate(
-    model: ConvNetwork,
-    board: list[int],
-    valid_actions: list[Action],
-    device: str,
-) -> Action:
-    afterstates = [apply_action(board, a) for a in valid_actions]
-    encoded = torch.stack([encode_state(s) for s, _ in afterstates])
-    with torch.no_grad():
-        values = model(encoded.to(device)).squeeze(-1)
-    rewards = torch.tensor([r for _, r in afterstates], device=device)
-    action_values = rewards + values
-    return valid_actions[action_values.argmax().item()]
-
-
-def select_action_ntuple(
-    model: NTupleNetwork,
-    board: list[int],
-    valid_actions: list[Action],
-    _device: str,
-) -> Action:
-    best_action = valid_actions[0]
-    best_value = float("-inf")
-    for a in valid_actions:
-        afterstate, reward = apply_action(board, a)
-        value = reward + model.evaluate(tuple(afterstate))
-        if value > best_value:
-            best_value = value
-            best_action = a
-    return best_action
-
-
 def watch(
     stdscr: curses.window,
-    model: ConvNetwork | NTupleNetwork,
+    model,
     device: str,
     delay_idx: int,
     model_type: str,
