@@ -10,6 +10,8 @@ dependencies = [
     "torch>=2.0",
     "numba>=0.65",
     "numpy>=1.24",
+    "playwright>=1.58.0",
+    "python-dotenv>=1.2.2",
     "tensorboard>=2.14",
 ]
 
