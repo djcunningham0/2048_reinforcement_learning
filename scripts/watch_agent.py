@@ -7,6 +7,7 @@ import time
 import torch
 
 from rl_2048.network import ConvNetwork
+from rl_2048.ntuple.network import NTupleNetwork
 from rl_2048.game import Action, Game2048, apply_action, encode_state
 from rl_2048.expectimax import (
     DepthSchedule,
@@ -17,7 +18,7 @@ from rl_2048.expectimax import (
 )
 from scripts.play import CELL_W, _tile_attr
 
-MODEL_TYPES = ("dqn", "afterstate")
+MODEL_TYPES = ("dqn", "afterstate", "ntuple")
 DELAY_STEPS = [0.0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0]
 
 
@@ -63,7 +64,13 @@ def draw(
     stdscr.refresh()
 
 
-def load_model(checkpoint_path: str, device: str, model_type: str) -> ConvNetwork:
+def load_model(
+    checkpoint_path: str,
+    device: str,
+    model_type: str,
+) -> ConvNetwork | NTupleNetwork:
+    if model_type == "ntuple":
+        return NTupleNetwork.load(checkpoint_path)
     output_dim = 4 if model_type == "dqn" else 1
     model = ConvNetwork(output_dim=output_dim)
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
@@ -103,9 +110,26 @@ def select_action_afterstate(
     return valid_actions[action_values.argmax().item()]
 
 
+def select_action_ntuple(
+    model: NTupleNetwork,
+    board: list[int],
+    valid_actions: list[Action],
+    _device: str,
+) -> Action:
+    best_action = valid_actions[0]
+    best_value = float("-inf")
+    for a in valid_actions:
+        afterstate, reward = apply_action(board, a)
+        value = reward + model.evaluate(tuple(afterstate))
+        if value > best_value:
+            best_value = value
+            best_action = a
+    return best_action
+
+
 def watch(
     stdscr: curses.window,
-    model: ConvNetwork,
+    model: ConvNetwork | NTupleNetwork,
     device: str,
     delay_idx: int,
     model_type: str,
@@ -113,7 +137,9 @@ def watch(
 ):
     use_search = isinstance(depth, DepthSchedule) or depth > 0
     if use_search:
-        if model_type == "afterstate":
+        if model_type == "ntuple":
+            value_fn = model.evaluate_batch
+        elif model_type == "afterstate":
             value_fn = make_afterstate_value_fn(model, device)
         else:
             value_fn = make_dqn_value_fn(model, device)
@@ -124,9 +150,12 @@ def watch(
             return expectimax_action(board, value_fn, _depth)
 
     else:
-        select_action = (
-            select_action_dqn if model_type == "dqn" else select_action_afterstate
-        )
+        action_fns = {
+            "dqn": select_action_dqn,
+            "afterstate": select_action_afterstate,
+            "ntuple": select_action_ntuple,
+        }
+        select_action = action_fns[model_type]
 
     curses.curs_set(0)
     curses.start_color()
@@ -189,7 +218,9 @@ def watch(
 
 def main():
     parser = argparse.ArgumentParser(description="Watch a trained agent play 2048")
-    parser.add_argument("checkpoint", type=str, help="Path to checkpoint file (.pt)")
+    parser.add_argument(
+        "checkpoint", type=str, help="Path to checkpoint file (.pt or .npz)"
+    )
     parser.add_argument(
         "--model-type",
         type=str,
