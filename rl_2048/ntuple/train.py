@@ -21,6 +21,7 @@ def train(
     run_dir: str = "runs",
     run_name: str | None = None,
     resume: str | None = None,
+    offset: int = 0,
 ):
     """
     Main n-tuple network training loop.
@@ -29,6 +30,8 @@ def train(
     ----------
     resume : str | None
         Path to a checkpoint .npz file to resume training from
+    offset : int
+        Episode offset to start from when resuming
     """
     logger.info("Training started")
 
@@ -57,7 +60,7 @@ def train(
     last_eval: dict = {}
 
     try:
-        for episode in range(1, config.max_episodes + 1):
+        for episode in range(1 + offset, config.max_episodes + 1):
             _run_episode(game, network, config, profiler)
 
             max_tile = max(game.board)

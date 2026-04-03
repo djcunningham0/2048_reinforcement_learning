@@ -31,6 +31,12 @@ def main():
         default=None,
         help="Path to a checkpoint .npz file to resume training from.",
     )
+    parser.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Episode offset to start from when resuming.",
+    )
     args = parser.parse_args()
 
     config = NTupleConfig()
@@ -44,6 +50,7 @@ def main():
         run_dir=args.run_dir,
         run_name=args.run_name,
         resume=args.resume,
+        offset=args.offset,
     )
 
 
