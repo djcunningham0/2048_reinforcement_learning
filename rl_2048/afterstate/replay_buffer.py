@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import torch
 
-from rl_2048.game import Action, Board, apply_action, encode_state
+from rl_2048.game import Action, Board, apply_action, encode_state_into
 
 
 @dataclass(slots=True)
@@ -55,27 +55,46 @@ class BatchedAfterstateTransitions:
     dones: torch.Tensor  # (batch,) float32
 
 
+class AfterstateComputer:
+    """Pre-allocates scratch tensors so ``compute_all_afterstates`` creates no temporaries."""
+
+    def __init__(self):
+        self._encoded = torch.zeros(4, 16, 4, 4)
+        self._rewards = torch.zeros(4)
+        self._valid_mask = torch.zeros(4, dtype=torch.bool)
+
+    def __call__(self, board: Board) -> AfterstateInfo:
+        encoded = self._encoded
+        rewards = self._rewards
+        valid_mask = self._valid_mask
+
+        encoded.zero_()
+        rewards.zero_()
+        valid_mask.zero_()
+
+        boards: list[Board] = []
+        for action in Action:
+            new_board, reward = apply_action(board, action)
+            boards.append(new_board)
+            if new_board != board:
+                encode_state_into(new_board, encoded[action])
+                rewards[action] = reward
+                valid_mask[action] = True
+
+        return AfterstateInfo(
+            boards=boards,
+            encoded=encoded.clone(),
+            rewards=rewards.clone(),
+            valid_mask=valid_mask.clone(),
+        )
+
+
+_default_computer = AfterstateComputer()
+
+
 def compute_all_afterstates(board: Board) -> AfterstateInfo:
     """Compute afterstates, rewards, and valid mask for all 4 actions from a board."""
-    boards: list[Board] = []
-    encoded = torch.zeros(4, 16, 4, 4)
-    rewards = torch.zeros(4)
-    valid_mask = torch.zeros(4, dtype=torch.bool)
-
-    for action in Action:
-        new_board, reward = apply_action(board, action)
-        boards.append(new_board)
-        if new_board != board:
-            encoded[action] = encode_state(new_board)
-            rewards[action] = reward
-            valid_mask[action] = True
-
-    return AfterstateInfo(
-        boards=boards,
-        encoded=encoded,
-        rewards=rewards,
-        valid_mask=valid_mask,
-    )
+    return _default_computer(board)
 
 
 class AfterstateReplayBuffer:

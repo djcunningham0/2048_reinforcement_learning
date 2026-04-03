@@ -177,10 +177,16 @@ def encode_state(board: Board) -> torch.Tensor:
          [0, 0, 0, 0]]
     """
     tensor = torch.zeros(16, 4, 4)
+    encode_state_into(board, tensor)
+    return tensor
+
+
+def encode_state_into(board: Board, out: torch.Tensor):
+    """One-hot encode ``board`` into the pre-allocated ``out`` tensor (16, 4, 4) in-place."""
+    out.zero_()
     for i, val in enumerate(board):
         r, c = divmod(i, 4)
-        tensor[_TILE_TO_CHANNEL[val], r, c] = 1.0
-    return tensor
+        out[_TILE_TO_CHANNEL[val], r, c] = 1.0
 
 
 def make_board(rows: list[list[int]]) -> Board:

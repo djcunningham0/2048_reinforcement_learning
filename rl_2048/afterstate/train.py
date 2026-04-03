@@ -2,7 +2,7 @@
 
 import logging
 import random
-from collections import Counter
+from collections import Counter, deque
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -47,7 +47,7 @@ def train(
     buffer = AfterstateReplayBuffer(config.buffer_capacity)
 
     global_step = 0
-    recent_losses: list[float] = []
+    recent_losses: deque[float] = deque(maxlen=100)
     last_eval: dict = {}
     profiler = Profiler()
     history: list[tuple[Board, int]] = []
@@ -75,11 +75,7 @@ def train(
             )
 
             max_tile = max(game.board)
-            avg_loss = (
-                sum(recent_losses[-100:]) / len(recent_losses[-100:])
-                if recent_losses
-                else 0.0
-            )
+            avg_loss = sum(recent_losses) / len(recent_losses) if recent_losses else 0.0
 
             writer.add_scalar("train/score", game.score, episode)
             writer.add_scalar("train/max_tile", max_tile, episode)
@@ -138,7 +134,7 @@ def _run_episode(
     buffer: AfterstateReplayBuffer,
     config: AfterstateConfig,
     global_step: int,
-    recent_losses: list[float],
+    recent_losses: deque[float],
     writer: SummaryWriter,
     profiler: Profiler,
     start_state: tuple[Board, int] | None = None,
@@ -180,7 +176,7 @@ def _run_episode(
 
         buffer.push(
             AfterstateTransition(
-                afterstate=cur_info.encoded[action],
+                afterstate=cur_info.encoded[action].clone(),
                 next_afterstates=next_info.encoded,
                 next_rewards=next_info.rewards,
                 next_valid_mask=next_info.valid_mask,
