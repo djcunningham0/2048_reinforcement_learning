@@ -2,7 +2,7 @@
 
 import torch
 
-from rl_2048.game import Action, apply_action, encode_state
+from rl_2048.game import Action, Board, apply_action, encode_state
 from rl_2048.network import ConvNetwork
 from rl_2048.ntuple.network import NTupleNetwork
 
@@ -27,7 +27,7 @@ def load_model(
 
 def select_action_dqn(
     model: ConvNetwork,
-    board: list[int],
+    board: Board,
     valid_actions: list[Action],
     device: str,
 ) -> Action:
@@ -44,7 +44,7 @@ def select_action_dqn(
 
 def select_action_afterstate(
     model: ConvNetwork,
-    board: list[int],
+    board: Board,
     valid_actions: list[Action],
     device: str,
 ) -> Action:
@@ -60,7 +60,7 @@ def select_action_afterstate(
 
 def select_action_ntuple(
     model: NTupleNetwork,
-    board: list[int],
+    board: Board,
     valid_actions: list[Action],
     _device: str,
 ) -> Action:
