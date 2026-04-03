@@ -25,6 +25,12 @@ def main():
         default=None,
         help="TensorBoard run name (default: ntuple_{timestamp}). Use slashes for grouping.",
     )
+    parser.add_argument(
+        "--resume",
+        type=str,
+        default=None,
+        help="Path to a checkpoint .npz file to resume training from.",
+    )
     args = parser.parse_args()
 
     config = NTupleConfig()
@@ -37,6 +43,7 @@ def main():
         config,
         run_dir=args.run_dir,
         run_name=args.run_name,
+        resume=args.resume,
     )
 
 

@@ -20,8 +20,16 @@ def train(
     config: NTupleConfig,
     run_dir: str = "runs",
     run_name: str | None = None,
+    resume: str | None = None,
 ):
-    """Main n-tuple network training loop."""
+    """
+    Main n-tuple network training loop.
+
+    Parameters
+    ----------
+    resume : str | None
+        Path to a checkpoint .npz file to resume training from
+    """
     logger.info("Training started")
 
     group_name = run_name or "ntuple"
@@ -35,7 +43,14 @@ def train(
     checkpoint_path.mkdir(parents=True, exist_ok=True)
 
     game = Game2048()
-    network = NTupleNetwork(config.patterns, v_init=config.v_init)
+
+    if resume:
+        resume_path = Path(resume)
+        network = NTupleNetwork.load(resume_path)
+        logger.info("Loaded checkpoint from %s", resume_path)
+    else:
+        network = NTupleNetwork(config.patterns, v_init=config.v_init)
+
     _log_network(writer, network)
     profiler = Profiler()
 
