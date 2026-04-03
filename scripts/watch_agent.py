@@ -1,4 +1,11 @@
-"""Watch a trained agent play 2048 in the terminal."""
+"""
+Watch a trained agent play 2048 in the terminal.
+
+Usage:
+    python -m scripts.watch agent checkpoints/checkpoint.pt --model-type afterstate
+    python -m scripts.watch_agent checkpoints/ntuple_model.npz --model-type ntuple --depth adaptive
+    ...
+"""
 
 import argparse
 import curses
