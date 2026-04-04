@@ -7,6 +7,7 @@ Usage examples::
     python -m scripts.evaluate_search checkpoints/model.pt --depths adaptive
     python -m scripts.evaluate_search checkpoints/model.pt --depths 1 adaptive 10:1,6:2,0:3
     python -m scripts.evaluate_search checkpoints/model.pt --model-type dqn --games 100
+    python -m scripts.evaluate_search checkpoints/ntuple.npz --model-type ntuple --depths 0 1
 """
 
 import argparse
@@ -22,13 +23,13 @@ from rl_2048.expectimax import (
     make_dqn_value_fn,
     parse_depth,
 )
-from scripts.watch_agent import (
+from rl_2048.inference import (
+    MODEL_TYPES,
     load_model,
     select_action_afterstate,
     select_action_dqn,
+    select_action_ntuple,
 )
-
-MODEL_TYPES = ("dqn", "afterstate")
 
 
 def run_game(
@@ -58,7 +59,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="Evaluate expectimax search at various depths"
     )
-    parser.add_argument("checkpoint", type=str, help="Path to checkpoint file (.pt)")
+    parser.add_argument(
+        "checkpoint", type=str, help="Path to checkpoint file (.pt or .npz)"
+    )
     parser.add_argument(
         "--model-type",
         type=str,
@@ -88,7 +91,12 @@ def main():
 
     model = load_model(args.checkpoint, args.device, args.model_type)
 
-    if args.model_type == "afterstate":
+    if args.model_type == "ntuple":
+        value_fn = model.evaluate_batch
+        greedy_fn = lambda board, valid: select_action_ntuple(
+            model, board, valid, args.device
+        )
+    elif args.model_type == "afterstate":
         value_fn = make_afterstate_value_fn(model, args.device)
         greedy_fn = lambda board, valid: select_action_afterstate(
             model, board, valid, args.device
