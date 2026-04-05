@@ -3,7 +3,9 @@
 import torch
 
 from rl_2048.game import Action, Board, apply_action, encode_state
-from rl_2048.network import ConvNetwork
+from torch import nn
+
+from rl_2048.network import NetworkType, make_network
 from rl_2048.ntuple.network import NTupleNetwork
 
 MODEL_TYPES = ("dqn", "afterstate", "ntuple")
@@ -13,12 +15,13 @@ def load_model(
     checkpoint_path: str,
     device: str,
     model_type: str,
-) -> ConvNetwork | NTupleNetwork:
+    network_type: NetworkType = "cnn",
+) -> nn.Module | NTupleNetwork:
     """Load a trained model from a checkpoint file."""
     if model_type == "ntuple":
         return NTupleNetwork.load(checkpoint_path)
     output_dim = 4 if model_type == "dqn" else 1
-    model = ConvNetwork(output_dim=output_dim)
+    model = make_network(network_type, output_dim=output_dim)
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
     model.load_state_dict(checkpoint["online_net"])
     model.eval()
@@ -26,7 +29,7 @@ def load_model(
 
 
 def select_action_dqn(
-    model: ConvNetwork,
+    model: nn.Module,
     board: Board,
     valid_actions: list[Action],
     device: str,
@@ -43,7 +46,7 @@ def select_action_dqn(
 
 
 def select_action_afterstate(
-    model: ConvNetwork,
+    model: nn.Module,
     board: Board,
     valid_actions: list[Action],
     device: str,

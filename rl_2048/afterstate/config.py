@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from rl_2048.device import default_device
+from rl_2048.network import NetworkType
 
 
 @dataclass
@@ -30,6 +31,7 @@ class AfterstateConfig:
     - `jump_start`: optional dict mapping tile values to spawn probabilities for placing
       large tiles at the start of fresh episodes (e.g., {2048: 0.05, 4096: 0.02}).
       Each tile is rolled independently. Only applies to fresh starts, not restarts.
+    - `network_type`: neural network architecture
     - `device`: "cpu", "cuda", or "mps" for training (auto-detected by default)
     """
 
@@ -47,6 +49,7 @@ class AfterstateConfig:
     restart: bool = False
     restart_min_length: int = 10
     jump_start: dict[int, float] | None = None
+    network_type: NetworkType = "cnn"
     device: str = default_device()
 
 

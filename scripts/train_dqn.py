@@ -27,6 +27,12 @@ def main():
     parser.add_argument("--grad-clip-norm", type=float, default=None)
     parser.add_argument("--eval-interval", type=int, default=None)
     parser.add_argument("--eval-episodes", type=int, default=None)
+    parser.add_argument(
+        "--network-type",
+        type=str,
+        choices=["cnn", "transformer"],
+        default=None,
+    )
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--run-dir", type=str, default="runs")
     parser.add_argument(
@@ -53,6 +59,7 @@ def main():
         "grad_clip_norm",
         "eval_interval",
         "eval_episodes",
+        "network_type",
         "device",
     ]:
         val = getattr(args, field.replace("-", "_"), None)

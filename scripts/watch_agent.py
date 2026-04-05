@@ -176,6 +176,13 @@ def main():
     )
     parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument(
+        "--network-type",
+        type=str,
+        choices=["cnn", "transformer"],
+        default="cnn",
+        help="Network architecture (default: cnn)",
+    )
+    parser.add_argument(
         "--delay",
         type=float,
         default=0.0,
@@ -197,7 +204,7 @@ def main():
     delay_idx = min(
         range(len(DELAY_STEPS)), key=lambda i: abs(DELAY_STEPS[i] - args.delay)
     )
-    model = load_model(args.checkpoint, args.device, args.model_type)
+    model = load_model(args.checkpoint, args.device, args.model_type, args.network_type)
     curses.wrapper(
         lambda stdscr: watch(
             stdscr, model, args.device, delay_idx, args.model_type, depth

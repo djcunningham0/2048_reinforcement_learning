@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from rl_2048.device import default_device
+from rl_2048.network import NetworkType
 
 
 @dataclass
@@ -26,6 +27,7 @@ class DQNConfig:
     - `eval_episodes`: how many episodes to run for each evaluation
     - `train_freq`: train every N environment steps (higher = faster but less sample
       efficient)
+    - `network_type`: neural network architecture
     - `device`: "cpu", "cuda", or "mps" for training (auto-detected by default)
     """
 
@@ -43,6 +45,7 @@ class DQNConfig:
     max_episodes: int = 100_000
     eval_interval: int = 500
     eval_episodes: int = 25
+    network_type: NetworkType = "cnn"
     device: str = default_device()
 
     def epsilon_at(self, step: int) -> float:

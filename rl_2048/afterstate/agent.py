@@ -12,7 +12,7 @@ from rl_2048.afterstate.replay_buffer import (
     BatchedAfterstateTransitions,
 )
 from rl_2048.game import Action
-from rl_2048.network import ConvNetwork
+from rl_2048.network import make_network
 
 
 class AfterstateAgent:
@@ -21,7 +21,9 @@ class AfterstateAgent:
     def __init__(self, config: AfterstateConfig):
         self.config = config
         self.device = torch.device(config.device)
-        self.online_net = ConvNetwork(output_dim=1).to(self.device)
+        self.online_net = make_network(config.network_type, output_dim=1).to(
+            self.device
+        )
         self.target_net = copy.deepcopy(self.online_net)
         self.target_net.eval()
         self.optimizer = torch.optim.Adam(self.online_net.parameters(), lr=config.lr)

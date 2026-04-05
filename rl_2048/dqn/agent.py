@@ -8,7 +8,7 @@ import torch
 from torch import nn
 
 from rl_2048.dqn.config import DQNConfig
-from rl_2048.network import ConvNetwork
+from rl_2048.network import make_network
 from rl_2048.dqn.replay_buffer import BatchedTransitions
 from rl_2048.game import Action
 
@@ -19,7 +19,9 @@ class DQNAgent:
     def __init__(self, config: DQNConfig):
         self.config = config
         self.device = torch.device(config.device)
-        self.online_net = ConvNetwork().to(self.device)
+        self.online_net = make_network(config.network_type, output_dim=4).to(
+            self.device
+        )
         self.target_net = copy.deepcopy(self.online_net)
         self.target_net.eval()
         self.optimizer = torch.optim.Adam(self.online_net.parameters(), lr=config.lr)

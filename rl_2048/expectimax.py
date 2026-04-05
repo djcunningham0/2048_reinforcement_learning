@@ -5,7 +5,7 @@ Main entrypoint is `expectimax_action`, which builds a depth-limited game tree o
 alternating max (player move) and chance (random tile spawn) nodes, batch-evaluates all
 leaf boards in a single forward pass, and backpropagates to select the best action.
 
-Two value-function adapters are provided to wrap a `ConvNetwork`:
+Two value-function adapters are provided to wrap a neural network model:
 - `make_afterstate_value_fn` for afterstate-value models (output_dim=1).
 - `make_dqn_value_fn` for DQN models (output_dim=4).
 
@@ -25,7 +25,7 @@ from rl_2048.game import (
     apply_action,
     encode_state,
 )
-from rl_2048.network import ConvNetwork
+from torch import nn
 
 
 class ValueFunction(Protocol):
@@ -332,7 +332,7 @@ def expectimax_action(
 
 
 def make_afterstate_value_fn(
-    model: ConvNetwork,
+    model: nn.Module,
     device: str | torch.device,
 ) -> ValueFunction:
     """Wrap an afterstate model (output_dim=1) as a ValueFunction."""
@@ -346,7 +346,7 @@ def make_afterstate_value_fn(
     return value_fn
 
 
-def make_dqn_value_fn(model: ConvNetwork, device: str | torch.device) -> ValueFunction:
+def make_dqn_value_fn(model: nn.Module, device: str | torch.device) -> ValueFunction:
     """
     Wrap a DQN model (output_dim=4) as a ValueFunction.
 

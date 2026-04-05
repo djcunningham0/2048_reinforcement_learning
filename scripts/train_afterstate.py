@@ -35,6 +35,12 @@ def main():
             "(e.g., 2048=0.05 4096=0.02)."
         ),
     )
+    parser.add_argument(
+        "--network-type",
+        type=str,
+        choices=["cnn", "transformer"],
+        default=None,
+    )
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--run-dir", type=str, default="runs")
     parser.add_argument(
@@ -60,6 +66,7 @@ def main():
         "eval_episodes",
         "restart",
         "restart_min_length",
+        "network_type",
         "device",
     ]:
         val = getattr(args, field.replace("-", "_"), None)
