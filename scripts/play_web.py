@@ -1,6 +1,10 @@
 """
 Use a trained agent to play the custom 2048 on a live website via browser automation.
 
+NOTE: this script plays a custom 2048 implementation (URL omitted for privacy), not the
+official 2048 game. The game mechanics are the same, but some changes would likely be
+needed to support the official version, or any other URL.
+
 Usage:
     python -m scripts.play_web checkpoints/checkpoint.pt --model-type afterstate
     python -m scripts.play_web checkpoints/ntuple_model.npz --model-type ntuple --depth adaptive
