@@ -3,7 +3,7 @@
 This repo implements several reinforcement learning techniques to play the game [2048](https://play2048.co).
 
 Check out my blog post for more details:
-https://dannycunningham.com/posts/2026-02-12-just-show-me-the-recipe/
+https://dannycunningham.com/posts/2026-04-09-reinforcement-learning-2048/
 
 ## Methodologies
 
