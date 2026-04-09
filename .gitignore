@@ -9,15 +9,24 @@ __pycache__/
 build/
 dist/
 
+# Rust
+target/
+*.rs.bk
+
 # Environment
 .env
 
-# Model weights
+# Model weights / checkpoints
 *.pt
 *.pth
+*.bin
 
 # OS
 .DS_Store
+
+# Editor
+*.swp
+*.swo
 
 # TensorBoard
 runs/

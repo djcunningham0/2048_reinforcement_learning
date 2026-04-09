@@ -1,0 +1,12 @@
+[package]
+name = "rust_2048_py"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "rust_2048_py"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.24", features = ["extension-module"] }
+rust_2048 = { path = "../rust_2048" }
