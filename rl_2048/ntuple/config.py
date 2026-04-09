@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 DEFAULT_PATTERNS: list[tuple[int, ...]] = [
     (0, 1, 2, 3, 4, 5),
     (4, 5, 6, 7, 8, 9),
-    (0, 1, 2, 4, 5, 6),
     (4, 5, 6, 8, 9, 10),
+    (8, 9, 10, 12, 13, 14),
 ]
 
 
