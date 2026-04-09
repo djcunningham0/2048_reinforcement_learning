@@ -39,7 +39,7 @@ class NTupleConfig:
         default_factory=lambda: list(DEFAULT_PATTERNS)
     )
     lr: float = 0.0025
-    max_episodes: int = 100_000
-    eval_interval: int = 1_000
-    eval_episodes: int = 25
+    max_episodes: int = 1_000_000
+    eval_interval: int = 100_000
+    eval_episodes: int = 50
     v_init: float = 0.0
